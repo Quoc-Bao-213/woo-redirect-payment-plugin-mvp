@@ -44,7 +44,7 @@ type CreateSessionResponse = {
   checkoutUrl: string;
 };
 
-const POLLING_MS = 4000;
+const POLLING_MS = 5000;
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("en-US");

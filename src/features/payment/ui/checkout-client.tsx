@@ -63,6 +63,11 @@ type FieldErrors = {
   cvv?: string;
 };
 
+type CheckoutFetchErrorCode =
+  | "SESSION_NOT_FOUND"
+  | "SESSION_EXPIRED"
+  | "UNKNOWN";
+
 const testCards = [
   "4242 4242 4242 4242 => success",
   "4141 4141 4141 4141 => failed",
@@ -184,6 +189,8 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetchErrorCode, setFetchErrorCode] =
+    useState<CheckoutFetchErrorCode | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -221,13 +228,31 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
   const loadSession = useCallback(async () => {
     try {
       setFetchError(null);
+      setFetchErrorCode(null);
       const response = await fetch(`/api/demo/session/${sessionId}`, {
         method: "GET",
         cache: "no-store",
       });
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
+        const parsed = (await response.json().catch(() => null)) as {
+          error?: { code?: string; message?: string };
+        } | null;
+        const code = parsed?.error?.code;
+        const message =
+          parsed?.error?.message ?? "Failed to load checkout session";
+
+        if (code === "SESSION_NOT_FOUND" || response.status === 404) {
+          setFetchErrorCode("SESSION_NOT_FOUND");
+        } else if (code === "SESSION_EXPIRED" || response.status === 410) {
+          setFetchErrorCode("SESSION_EXPIRED");
+        } else {
+          setFetchErrorCode("UNKNOWN");
+        }
+
+        setFetchError(message);
+        setSession(null);
+        return;
       }
 
       const parsed = (await response.json()) as SessionDetail;
@@ -242,6 +267,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
         error instanceof Error
           ? error.message
           : "Failed to load checkout session";
+      setFetchErrorCode("UNKNOWN");
       setFetchError(message);
     } finally {
       setLoading(false);
@@ -369,14 +395,74 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
   }
 
   if (!session) {
+    const notFoundMessage =
+      fetchError ??
+      "Checkout session was not found. Please create a new session.";
+
     return (
-      <div className="mx-auto w-full max-w-3xl p-6">
-        <Alert variant="destructive">
-          <AlertTitle>Session not available</AlertTitle>
-          <AlertDescription>
-            {fetchError ?? "Could not find this checkout session."}
-          </AlertDescription>
-        </Alert>
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-10 md:px-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-48 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
+
+        <Card className="border-teal-300/80 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-2xl font-semibold text-slate-900">
+              Session not available
+            </CardTitle>
+            <CardDescription className="text-base leading-relaxed text-slate-700">
+              We could not load this checkout session.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTitle>
+                {fetchErrorCode === "SESSION_NOT_FOUND"
+                  ? "Session not found"
+                  : "Session loading failed"}
+              </AlertTitle>
+              <AlertDescription>{notFoundMessage}</AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href="/">Back to Homepage</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const isSessionExpired = new Date(session.expiresAt).getTime() <= Date.now();
+
+  if (isSessionExpired) {
+    return (
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-10 md:px-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-48 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
+
+        <Card className="border-teal-300/80 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-2xl font-semibold text-slate-900">
+              Session expired
+            </CardTitle>
+            <CardDescription className="text-base leading-relaxed text-slate-700">
+              This checkout session is no longer valid.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTitle>Checkout session has expired</AlertTitle>
+              <AlertDescription>
+                This session passed its time limit. Please go back to homepage
+                and create a new checkout session.
+              </AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href="/">Back to Homepage</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
