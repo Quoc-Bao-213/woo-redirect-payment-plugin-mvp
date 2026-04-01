@@ -1,7 +1,9 @@
-﻿"use client";
+"use client";
 
 import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useState } from "react";
+import { StatusBadge } from "@/features/payment/ui/status-badge";
+import { StepTracker } from "@/features/payment/ui/step-tracker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -11,11 +13,15 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
+import {
+  type SessionStatus,
+  deriveFlowStageFromSession,
+} from "@/features/payment/ui/flow-stage";
 
 type LatestStatus = {
   sessionId: string;
   orderId: string;
-  status: "pending" | "succeeded" | "failed" | "cancelled";
+  status: SessionStatus;
   attemptCount: number;
   maxAttempts: number;
   amount: number;
@@ -69,6 +75,17 @@ export function HomeClient() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const flowState = deriveFlowStageFromSession(
+    latestStatus
+      ? {
+          status: latestStatus.status,
+          attemptCount: latestStatus.attemptCount,
+          webhookDelivered: latestStatus.webhookDelivered,
+        }
+      : null,
+    "home",
+  );
 
   const refreshLatestStatus = useCallback(async () => {
     try {
@@ -137,19 +154,27 @@ export function HomeClient() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10 md:px-6">
-      <Card>
+    <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 md:px-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-60 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
+
+      <Card className="border-teal-300/85 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">
+          <CardTitle className="text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
             WooCommerce Redirect Payment MVP
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base leading-relaxed text-slate-700">
             Demo flow: homepage creates checkout session, user is redirected to
             hosted checkout, and webhook is the only source of truth for final
             payment state.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <StepTracker
+            stage={flowState.stage}
+            activeStep={flowState.activeStep}
+            statusVariant={flowState.statusVariant}
+          />
+
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleCheckout} disabled={creating}>
               {creating ? "Creating session..." : "Pay Now"}
@@ -169,23 +194,27 @@ export function HomeClient() {
             </Alert>
           ) : null}
         </CardContent>
-        <CardFooter className="justify-between text-xs text-muted-foreground">
+        <CardFooter className="justify-between text-sm text-muted-foreground">
           <span>
-            Redirect result page is UX only, not status source of truth.
+            Redirect result page is UX only, webhook remains the source of
+            truth.
           </span>
         </CardFooter>
       </Card>
 
-      <Card>
+      <Card className="border-teal-300/80 shadow-sm">
         <CardHeader>
-          <CardTitle>Payment Session Status</CardTitle>
-          <CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            Payment Session Status
+            {latestStatus ? <StatusBadge status={latestStatus.status} /> : null}
+          </CardTitle>
+          <CardDescription className="text-base leading-relaxed text-slate-700">
             Latest session state from backend database after webhook processing.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loadingStatus ? (
-            <p className="text-sm text-muted-foreground">Loading status...</p>
+            <p className="text-base text-muted-foreground">Loading status...</p>
           ) : null}
 
           {statusError ? (
@@ -196,13 +225,13 @@ export function HomeClient() {
           ) : null}
 
           {!loadingStatus && !statusError && !latestStatus ? (
-            <p className="text-sm text-muted-foreground">
-              No session yet. Click Checkout to create one.
+            <p className="text-base text-muted-foreground">
+              No session yet. Click Pay Now to create one.
             </p>
           ) : null}
 
           {latestStatus ? (
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-base md:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground">Session ID</dt>
                 <dd className="font-mono">{latestStatus.sessionId}</dd>
@@ -213,7 +242,9 @@ export function HomeClient() {
               </div>
               <div>
                 <dt className="text-muted-foreground">Current status</dt>
-                <dd className="font-medium uppercase">{latestStatus.status}</dd>
+                <dd className="mt-1">
+                  <StatusBadge status={latestStatus.status} />
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Attempt count</dt>

@@ -20,6 +20,7 @@ export default async function ResultFailedPage({
       title="Payment Redirect: Failed"
       description="Payment failed on hosted checkout. Final status is still confirmed by webhook."
       sessionId={getSessionId(params.sessionId)}
+      expectedStatus="failed"
     />
   );
 }

@@ -1,25 +1,32 @@
-﻿"use client";
+"use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/features/payment/ui/status-badge";
+import { StepTracker } from "@/features/payment/ui/step-tracker";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
+  CardTitle,
+  CardHeader,
   CardContent,
   CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import {
+  type SessionStatus,
+  deriveFlowStageFromSession,
+} from "@/features/payment/ui/flow-stage";
 
 type SessionDetail = {
   sessionId: string;
   orderId: string;
   amount: number;
   currency: string;
-  status: "pending" | "succeeded" | "failed" | "cancelled";
+  status: SessionStatus;
   attemptCount: number;
   maxAttempts: number;
   expiresAt: string;
@@ -191,6 +198,26 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
     return Math.max(session.maxAttempts - session.attemptCount, 0);
   }, [session]);
 
+  const flowStateBase = deriveFlowStageFromSession(
+    session
+      ? {
+          status: session.status,
+          attemptCount: session.attemptCount,
+          webhookDelivered: session.webhookDelivered,
+        }
+      : null,
+    "checkout",
+  );
+
+  const flowState: ReturnType<typeof deriveFlowStageFromSession> =
+    processing || cancelling
+      ? {
+          stage: "webhook_processing",
+          statusVariant: "processing",
+          activeStep: 4,
+        }
+      : flowStateBase;
+
   const loadSession = useCallback(async () => {
     try {
       setFetchError(null);
@@ -335,7 +362,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
 
   if (loading) {
     return (
-      <p className="mx-auto w-full max-w-3xl p-6 text-sm text-muted-foreground">
+      <p className="mx-auto w-full max-w-3xl p-6 text-base text-muted-foreground">
         Loading checkout session...
       </p>
     );
@@ -355,11 +382,28 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-8 md:grid-cols-[1fr_360px] md:px-6">
-      <Card>
+    <div className="relative mx-auto grid w-full max-w-6xl gap-6 px-4 py-5 md:grid-cols-[1fr_380px] md:px-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
+
+      <StepTracker
+        className="md:col-span-2"
+        stage={flowState.stage}
+        activeStep={flowState.activeStep}
+        statusVariant={flowState.statusVariant}
+      />
+
+      <div className="md:col-span-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/">Back to Homepage</Link>
+        </Button>
+      </div>
+
+      <Card className="border-teal-300/80 shadow-sm">
         <CardHeader>
-          <CardTitle>Hosted Checkout Demo</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl font-semibold text-slate-900">
+            Hosted Checkout Demo
+          </CardTitle>
+          <CardDescription className="text-base leading-relaxed text-slate-700">
             Submit payment details here. Final status is written only by webhook
             processing.
           </CardDescription>
@@ -367,7 +411,9 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
         <CardContent>
           <form className="space-y-4" onSubmit={handlePay}>
             <div className="grid gap-3">
-              <h2 className="text-sm font-medium">Customer information</h2>
+              <h2 className="text-base font-semibold text-slate-900">
+                Customer information
+              </h2>
               <div className="grid gap-1.5">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -383,7 +429,9 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
             </div>
 
             <div className="grid gap-3">
-              <h2 className="text-sm font-medium">Payment information</h2>
+              <h2 className="text-base font-semibold text-slate-900">
+                Payment information
+              </h2>
               <div className="grid gap-1.5">
                 <Label htmlFor="card-holder">Card holder name</Label>
                 <Input
@@ -492,12 +540,16 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-teal-300/80 shadow-sm">
         <CardHeader>
-          <CardTitle>Order/session summary</CardTitle>
-          <CardDescription>Current values from backend</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            Order/session summary <StatusBadge status={session.status} />
+          </CardTitle>
+          <CardDescription className="text-base leading-relaxed text-slate-700">
+            Current values from backend
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="space-y-3 text-base">
           <div>
             <p className="text-muted-foreground">Session ID</p>
             <p className="font-mono">{session.sessionId}</p>
@@ -512,7 +564,9 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
           </div>
           <div>
             <p className="text-muted-foreground">Status</p>
-            <p className="uppercase">{session.status}</p>
+            <p className="mt-1">
+              <StatusBadge status={session.status} />
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Attempt count</p>
@@ -533,7 +587,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
             <p>{session.webhookDelivered ? "Yes" : "No"}</p>
           </div>
           {session.latestAttempt ? (
-            <div className="rounded-md border bg-muted/40 p-3">
+            <div className="rounded-md border border-teal-300/75 bg-cyan-100/55 p-3">
               <p className="text-muted-foreground">Latest attempt</p>
               <p>Status: {session.latestAttempt.status}</p>
               <p>Masked card: {session.latestAttempt.maskedCardNumber}</p>
@@ -544,15 +598,15 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
         </CardContent>
       </Card>
 
-      <Card className="md:col-span-2">
+      <Card className="border-teal-300/80 shadow-sm md:col-span-2">
         <CardHeader>
           <CardTitle>Test cards for demo</CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base leading-relaxed text-slate-700">
             Use these test card numbers on hosted checkout
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1 text-sm text-muted-foreground">
+          <ul className="space-y-1.5 text-base text-muted-foreground">
             {testCards.map((item) => (
               <li key={item}>{item}</li>
             ))}

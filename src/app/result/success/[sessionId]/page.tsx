@@ -12,6 +12,7 @@ export default async function ResultSuccessSessionPage({
       title="Payment Redirect: Success"
       description="Payment was submitted successfully. Wait for webhook update to confirm final status."
       sessionId={sessionId}
+      expectedStatus="succeeded"
     />
   );
 }

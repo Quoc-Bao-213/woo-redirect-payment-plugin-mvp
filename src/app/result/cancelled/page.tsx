@@ -20,6 +20,7 @@ export default async function ResultCancelledPage({
       title="Payment Redirect: Cancelled"
       description="Payment was cancelled by user. Final state is written by webhook processing."
       sessionId={getSessionId(params.sessionId)}
+      expectedStatus="cancelled"
     />
   );
 }
