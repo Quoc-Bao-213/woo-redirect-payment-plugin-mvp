@@ -46,7 +46,7 @@ export function ResultView({
 
     let active = true;
 
-    const refreshSession = async () => {
+    const loadSession = async () => {
       try {
         const response = await fetch(`/api/demo/session/${sessionId}`, {
           method: "GET",
@@ -70,27 +70,17 @@ export function ResultView({
         }
 
         setSession(parsed);
-        setLoading(false);
-      } catch {
+      } finally {
         if (active) {
           setLoading(false);
         }
       }
     };
 
-    void refreshSession();
-
-    const interval = setInterval(() => {
-      if (!active) {
-        return;
-      }
-
-      void refreshSession();
-    }, 2500);
+    void loadSession();
 
     return () => {
       active = false;
-      clearInterval(interval);
     };
   }, [sessionId]);
 

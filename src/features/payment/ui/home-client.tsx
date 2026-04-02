@@ -1,9 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { useCallback, useEffect, useState } from "react";
 import { StatusBadge } from "@/features/payment/ui/status-badge";
 import { StepTracker } from "@/features/payment/ui/step-tracker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -48,7 +48,6 @@ type CreateSessionResponse = {
   supersededSessionId?: string;
 };
 
-const POLLING_MS = 5000;
 const DEFAULT_AMOUNT = "4999";
 
 function formatDateTime(value: string) {
@@ -113,41 +112,52 @@ export function HomeClient() {
     "home",
   );
 
-  const refreshLatestStatus = useCallback(async () => {
-    try {
-      setStatusError(null);
-
-      const response = await fetch("/api/demo/latest-status", {
-        method: "GET",
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-      }
-
-      const parsed = (await response.json()) as LatestStatusResponse;
-      setLatestStatus(parsed.latestStatus);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to fetch latest status";
-      setStatusError(message);
-    } finally {
-      setLoadingStatus(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void refreshLatestStatus();
+    let active = true;
 
-    const interval = setInterval(() => {
-      void refreshLatestStatus();
-    }, POLLING_MS);
+    const loadLatestStatus = async () => {
+      try {
+        setStatusError(null);
 
-    return () => clearInterval(interval);
-  }, [refreshLatestStatus]);
+        const response = await fetch("/api/demo/latest-status", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const parsed = (await response.json()) as LatestStatusResponse;
+
+        if (!active) {
+          return;
+        }
+
+        setLatestStatus(parsed.latestStatus);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch latest status";
+        setStatusError(message);
+      } finally {
+        if (active) {
+          setLoadingStatus(false);
+        }
+      }
+    };
+
+    void loadLatestStatus();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleCheckout() {
     setCreating(true);
@@ -211,33 +221,30 @@ export function HomeClient() {
             statusVariant={flowState.statusVariant}
           />
 
-          <div className="grid gap-1.5 md:max-w-xs">
-            <Label htmlFor="amount-minor">Amount (USD minor unit)</Label>
-            <Input
-              id="amount-minor"
-              inputMode="numeric"
-              value={amountInput}
-              onChange={(event) =>
-                setAmountInput(normalizeDigits(event.target.value))
-              }
-              placeholder="4999"
+          <div className="grid gap-2 md:grid-cols-[340px_auto] md:items-end md:gap-x-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="amount-minor">Amount (USD minor unit)</Label>
+              <Input
+                id="amount-minor"
+                inputMode="numeric"
+                value={amountInput}
+                onChange={(event) =>
+                  setAmountInput(normalizeDigits(event.target.value))
+                }
+                placeholder="4999"
+                disabled={creating}
+              />
+            </div>
+            <Button
+              className="w-fit self-start md:self-end"
+              onClick={handleCheckout}
               disabled={creating}
-            />
-            <p className="text-sm text-muted-foreground">
-              Enter integer cents. Example: 4999 = $49.99 (USD fixed).
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleCheckout} disabled={creating}>
+            >
               {creating ? "Creating session..." : "Pay Now"}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => void refreshLatestStatus()}
-            >
-              Refresh Status
-            </Button>
+            <p className="text-sm text-muted-foreground whitespace-nowrap md:col-span-2">
+              Enter integer cents. Example: 4999 = $49.99 (USD fixed).
+            </p>
           </div>
 
           {createError ? (

@@ -283,6 +283,7 @@ export async function createDemoSession(
     ...(supersededSessionId ? { supersededSessionId } : {}),
   };
 }
+
 export async function getDemoSession(
   sessionId: string,
 ): Promise<SessionDetails | null> {
