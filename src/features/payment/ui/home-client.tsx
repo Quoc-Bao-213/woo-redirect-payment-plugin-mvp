@@ -1,5 +1,7 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useState } from "react";
 import { StatusBadge } from "@/features/payment/ui/status-badge";
@@ -42,9 +44,12 @@ type CreateSessionResponse = {
   orderId: string;
   status: string;
   checkoutUrl: string;
+  reused: boolean;
+  supersededSessionId?: string;
 };
 
 const POLLING_MS = 5000;
+const DEFAULT_AMOUNT = "4999";
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("en-US");
@@ -69,12 +74,33 @@ async function readErrorMessage(response: Response) {
   }
 }
 
+function normalizeDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function parseMinorAmount(input: string) {
+  const normalized = input.trim();
+
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+
+  const value = Number(normalized);
+
+  if (!Number.isInteger(value) || value <= 0 || value > 1_000_000) {
+    return null;
+  }
+
+  return value;
+}
+
 export function HomeClient() {
   const [latestStatus, setLatestStatus] = useState<LatestStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [amountInput, setAmountInput] = useState(DEFAULT_AMOUNT);
 
   const flowState = deriveFlowStageFromSession(
     latestStatus
@@ -127,6 +153,16 @@ export function HomeClient() {
     setCreating(true);
     setCreateError(null);
 
+    const parsedAmount = parseMinorAmount(amountInput);
+
+    if (parsedAmount === null) {
+      setCreateError(
+        "Amount must be a positive integer in minor unit (1 - 1000000).",
+      );
+      setCreating(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/demo/session/create", {
         method: "POST",
@@ -134,7 +170,7 @@ export function HomeClient() {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          amount: 4999,
+          amount: parsedAmount,
           currency: "USD",
         }),
       });
@@ -174,6 +210,23 @@ export function HomeClient() {
             activeStep={flowState.activeStep}
             statusVariant={flowState.statusVariant}
           />
+
+          <div className="grid gap-1.5 md:max-w-xs">
+            <Label htmlFor="amount-minor">Amount (USD minor unit)</Label>
+            <Input
+              id="amount-minor"
+              inputMode="numeric"
+              value={amountInput}
+              onChange={(event) =>
+                setAmountInput(normalizeDigits(event.target.value))
+              }
+              placeholder="4999"
+              disabled={creating}
+            />
+            <p className="text-sm text-muted-foreground">
+              Enter integer cents. Example: 4999 = $49.99 (USD fixed).
+            </p>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleCheckout} disabled={creating}>

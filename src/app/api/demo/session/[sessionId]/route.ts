@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { toErrorResponse } from "@/lib/http";
 import { getDemoSession } from "@/features/payment/service";
 
@@ -19,6 +19,18 @@ export async function GET(
           },
         },
         { status: 404 },
+      );
+    }
+
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "SESSION_EXPIRED",
+            message: "Checkout session has expired",
+          },
+        },
+        { status: 410 },
       );
     }
 

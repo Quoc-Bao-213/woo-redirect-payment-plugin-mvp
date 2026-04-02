@@ -45,7 +45,11 @@ type SessionDetail = {
 };
 
 type ActionResponse = {
-  redirectTo: "/result/success" | "/result/failed" | "/result/cancelled";
+  redirectTo:
+    | "/checkout"
+    | "/result/success"
+    | "/result/failed"
+    | "/result/cancelled";
   message: string;
 };
 
@@ -70,8 +74,7 @@ type CheckoutFetchErrorCode =
 
 const testCards = [
   "4242 4242 4242 4242 => success",
-  "4141 4141 4141 4141 => failed",
-  "3232 3232 3232 3232 => insufficient funds",
+  "Any other card => failed (retry up to 3 times)",
 ] as const;
 
 function formatDateTime(value: string) {
@@ -205,8 +208,12 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
     return Math.max(session.maxAttempts - session.attemptCount, 0);
   }, [session]);
 
+  const isRetryExhausted =
+    session?.status === "failed" && session.attemptCount >= session.maxAttempts;
   const isPaymentLockedSession =
-    session?.status === "succeeded" || session?.status === "failed";
+    session?.status === "succeeded" ||
+    session?.status === "cancelled" ||
+    Boolean(isRetryExhausted);
 
   const flowStateBase = deriveFlowStageFromSession(
     session
@@ -355,6 +362,13 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
       }
 
       const parsed = (await response.json()) as ActionResponse;
+
+      if (parsed.redirectTo === "/checkout") {
+        setActionError("Invalid Credit Card Number");
+        setProcessing(false);
+        await loadSession();
+        return;
+      }
       router.push(`${parsed.redirectTo}/${sessionId}`);
     } catch (error) {
       const message =
@@ -502,8 +516,8 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
             Hosted Checkout Demo
           </CardTitle>
           <CardDescription className="text-base leading-relaxed text-slate-700">
-            Submit payment details here. Final status is written only by webhook
-            processing.
+            Submit payment details here. Final status is confirmed by webhook
+            only on success or after the last failed retry.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -631,12 +645,16 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
                 <AlertTitle>
                   {session.status === "succeeded"
                     ? "Payment already completed"
-                    : "Payment already failed"}
+                    : session.status === "cancelled"
+                      ? "Payment cancelled"
+                      : "Payment failed (retries exhausted)"}
                 </AlertTitle>
                 <AlertDescription>
                   {session.status === "succeeded"
                     ? "This checkout session is successful. Payment actions are locked and shown for reference only."
-                    : "This checkout session is failed. Payment actions are locked and shown for reference only."}
+                    : session.status === "cancelled"
+                      ? "This checkout session was cancelled. Payment actions are locked and shown for reference only."
+                      : "This checkout session reached maximum retry attempts. Payment actions are locked and shown for reference only."}
                 </AlertDescription>
               </Alert>
             ) : (

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { ApiError } from "@/lib/http";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { simulatePayment } from "@/features/payment/simulator";
 import {
   sessions,
@@ -85,6 +85,15 @@ type InternalWebhookPayload = {
   responseCode: string | null;
   responseMessage: string | null;
   occurredAt: string;
+};
+
+type CreateSessionResult = {
+  sessionId: string;
+  orderId: string;
+  status: SessionStatus;
+  checkoutUrl: string;
+  reused: boolean;
+  supersededSessionId?: string;
 };
 
 function normalizeCurrency(currency?: string) {
@@ -215,16 +224,47 @@ function resolveIncomingStatus(
 export async function createDemoSession(
   input: CreateSessionInput,
   origin?: string,
-) {
+): Promise<CreateSessionResult> {
   const amount = input.amount ?? DEFAULT_AMOUNT;
   const currency = normalizeCurrency(input.currency);
   const now = new Date();
-  const orderId = generateOrderId();
+  const baseUrl = resolveAppBaseUrl(origin);
+
+  const [activePendingSession] = await db
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.status, "pending"), gt(sessions.expiresAt, now)))
+    .orderBy(desc(sessions.updatedAt))
+    .limit(1);
+
+  if (activePendingSession && activePendingSession.amount === amount) {
+    return {
+      sessionId: activePendingSession.id,
+      orderId: activePendingSession.orderId,
+      status: activePendingSession.status,
+      checkoutUrl: `${baseUrl}/checkout/${activePendingSession.id}`,
+      reused: true,
+    };
+  }
+
+  let supersededSessionId: string | undefined;
+
+  if (activePendingSession && activePendingSession.amount !== amount) {
+    await db
+      .update(sessions)
+      .set({
+        expiresAt: now,
+        updatedAt: now,
+      })
+      .where(eq(sessions.id, activePendingSession.id));
+
+    supersededSessionId = activePendingSession.id;
+  }
 
   const [createdSession] = await db
     .insert(sessions)
     .values({
-      orderId,
+      orderId: generateOrderId(),
       amount,
       currency,
       status: "pending",
@@ -234,16 +274,15 @@ export async function createDemoSession(
     })
     .returning();
 
-  const baseUrl = resolveAppBaseUrl(origin);
-
   return {
     sessionId: createdSession.id,
     orderId: createdSession.orderId,
     status: createdSession.status,
     checkoutUrl: `${baseUrl}/checkout/${createdSession.id}`,
+    reused: false,
+    ...(supersededSessionId ? { supersededSessionId } : {}),
   };
 }
-
 export async function getDemoSession(
   sessionId: string,
 ): Promise<SessionDetails | null> {
@@ -307,21 +346,9 @@ export async function processDemoPayment(
 
   const nextAttemptNumber = session.attemptCount + 1;
   const simulationResult = simulatePayment(input.cardNumber);
-  const webhookPayload: InternalWebhookPayload = {
-    eventId: generateEventId(),
-    eventType:
-      simulationResult.sessionStatus === "succeeded"
-        ? "payment.succeeded"
-        : "payment.failed",
-    sessionId: session.id,
-    orderId: session.orderId,
-    status: simulationResult.sessionStatus,
-    attemptNumber: nextAttemptNumber,
-    transactionId: simulationResult.transactionId,
-    responseCode: simulationResult.responseCode,
-    responseMessage: simulationResult.responseMessage,
-    occurredAt: new Date().toISOString(),
-  };
+  const isSuccessAttempt = simulationResult.attemptStatus === "succeeded";
+  const isFinalFailedAttempt =
+    !isSuccessAttempt && nextAttemptNumber >= session.maxAttempts;
 
   await db
     .update(sessions)
@@ -342,6 +369,27 @@ export async function processDemoPayment(
     transactionId: simulationResult.transactionId,
   });
 
+  if (!isSuccessAttempt && !isFinalFailedAttempt) {
+    return {
+      redirectTo: "/checkout",
+      message:
+        "Payment attempt failed. Please retry. Final status is not updated until terminal webhook.",
+    };
+  }
+
+  const webhookPayload: InternalWebhookPayload = {
+    eventId: generateEventId(),
+    eventType: isSuccessAttempt ? "payment.succeeded" : "payment.failed",
+    sessionId: session.id,
+    orderId: session.orderId,
+    status: isSuccessAttempt ? "succeeded" : "failed",
+    attemptNumber: nextAttemptNumber,
+    transactionId: simulationResult.transactionId,
+    responseCode: simulationResult.responseCode,
+    responseMessage: simulationResult.responseMessage,
+    occurredAt: new Date().toISOString(),
+  };
+
   await db.insert(webhookEvents).values({
     sessionId: session.id,
     eventId: webhookPayload.eventId,
@@ -353,7 +401,7 @@ export async function processDemoPayment(
   await dispatchInternalWebhook(webhookPayload, origin);
 
   return {
-    redirectTo: simulationResult.redirectPath,
+    redirectTo: isSuccessAttempt ? "/result/success" : "/result/failed",
     message: "Payment submitted. Final state will be updated by webhook.",
   };
 }

@@ -85,7 +85,11 @@ export function deriveFlowStageFromSession(
     return { stage: "final_state", statusVariant, activeStep: 5 };
   }
 
-  if (session.attemptCount > 0 && !session.webhookDelivered) {
+  if (
+    context === "result" &&
+    session.attemptCount > 0 &&
+    !session.webhookDelivered
+  ) {
     return {
       stage: "webhook_processing",
       statusVariant: "processing",
