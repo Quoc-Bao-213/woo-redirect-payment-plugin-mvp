@@ -1,4 +1,4 @@
-﻿import { relations } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import { webhookEvents } from "./webhookEvents";
 import type { SessionStatus } from "./constants";
 import { paymentAttempts } from "./paymentAttempts";
@@ -16,7 +16,6 @@ export const sessions = pgTable(
   "sessions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id").notNull().unique().defaultRandom(),
     orderId: uuid("order_id").notNull().unique().defaultRandom(),
     amount: integer("amount").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
@@ -37,7 +36,6 @@ export const sessions = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("sessions_session_id_idx").on(table.sessionId),
     uniqueIndex("sessions_order_id_idx").on(table.orderId),
     index("sessions_status_idx").on(table.status),
     index("sessions_updated_at_idx").on(table.updatedAt),

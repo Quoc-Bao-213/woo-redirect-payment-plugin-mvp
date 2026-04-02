@@ -1,4 +1,4 @@
-﻿import { sessions } from "./sessions";
+import { sessions } from "./sessions";
 import { relations } from "drizzle-orm";
 import type { AttemptStatus } from "./constants";
 import {
@@ -17,7 +17,7 @@ export const paymentAttempts = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     sessionId: uuid("session_id")
       .notNull()
-      .references(() => sessions.sessionId, { onDelete: "cascade" }),
+      .references(() => sessions.id, { onDelete: "cascade" }),
     attemptNumber: integer("attempt_number").notNull(),
     maskedCardNumber: varchar("masked_card_number", { length: 24 }).notNull(),
     status: varchar("status", { length: 20 }).$type<AttemptStatus>().notNull(),
@@ -45,7 +45,7 @@ export const paymentAttemptsRelations = relations(
   ({ one }) => ({
     session: one(sessions, {
       fields: [paymentAttempts.sessionId],
-      references: [sessions.sessionId],
+      references: [sessions.id],
     }),
   }),
 );

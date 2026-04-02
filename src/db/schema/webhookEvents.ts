@@ -1,4 +1,4 @@
-﻿import { sessions } from "./sessions";
+import { sessions } from "./sessions";
 import { relations } from "drizzle-orm";
 import type { WebhookEventType } from "./constants";
 import {
@@ -18,7 +18,7 @@ export const webhookEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     sessionId: uuid("session_id")
       .notNull()
-      .references(() => sessions.sessionId, { onDelete: "cascade" }),
+      .references(() => sessions.id, { onDelete: "cascade" }),
     eventId: uuid("event_id").notNull().unique().defaultRandom(),
     eventType: varchar("event_type", { length: 40 })
       .$type<WebhookEventType>()
@@ -42,7 +42,7 @@ export const webhookEvents = pgTable(
 export const webhookEventsRelations = relations(webhookEvents, ({ one }) => ({
   session: one(sessions, {
     fields: [webhookEvents.sessionId],
-    references: [sessions.sessionId],
+    references: [sessions.id],
   }),
 }));
 

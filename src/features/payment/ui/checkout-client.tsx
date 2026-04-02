@@ -205,6 +205,9 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
     return Math.max(session.maxAttempts - session.attemptCount, 0);
   }, [session]);
 
+  const isPaymentLockedSession =
+    session?.status === "succeeded" || session?.status === "failed";
+
   const flowStateBase = deriveFlowStageFromSession(
     session
       ? {
@@ -328,6 +331,10 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
     event.preventDefault();
     setActionError(null);
 
+    if (isPaymentLockedSession) {
+      return;
+    }
+
     if (!validatePaymentFields()) {
       return;
     }
@@ -361,6 +368,11 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
   async function handleCancel() {
     setActionError(null);
     setCancelling(true);
+
+    if (isPaymentLockedSession) {
+      setCancelling(false);
+      return;
+    }
 
     try {
       const response = await fetch(`/api/demo/session/${sessionId}/cancel`, {
@@ -509,6 +521,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
                   onChange={(event) =>
                     onInputChange("email", event.target.value)
                   }
+                  disabled={isPaymentLockedSession}
                   required
                 />
               </div>
@@ -526,6 +539,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
                   onChange={(event) =>
                     onInputChange("cardHolderName", event.target.value)
                   }
+                  disabled={isPaymentLockedSession}
                   required
                 />
               </div>
@@ -543,6 +557,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
                     }))
                   }
                   placeholder="4242 4242 4242 4242"
+                  disabled={isPaymentLockedSession}
                   required
                   aria-invalid={Boolean(fieldErrors.cardNumber)}
                 />
@@ -567,6 +582,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
                       }))
                     }
                     placeholder="01 / 30"
+                    disabled={isPaymentLockedSession}
                     required
                     aria-invalid={Boolean(fieldErrors.expiry)}
                   />
@@ -590,6 +606,7 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
                         cvv: validateCvv(form.cvv),
                       }))
                     }
+                    disabled={isPaymentLockedSession}
                     required
                     aria-invalid={Boolean(fieldErrors.cvv)}
                   />
@@ -609,19 +626,34 @@ export function CheckoutClient({ sessionId }: { sessionId: string }) {
               </Alert>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={processing || cancelling}>
-                {processing ? "Processing..." : "Pay Now"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={processing || cancelling}
-                onClick={handleCancel}
-              >
-                {cancelling ? "Cancelling..." : "Cancel"}
-              </Button>
-            </div>
+            {isPaymentLockedSession ? (
+              <Alert>
+                <AlertTitle>
+                  {session.status === "succeeded"
+                    ? "Payment already completed"
+                    : "Payment already failed"}
+                </AlertTitle>
+                <AlertDescription>
+                  {session.status === "succeeded"
+                    ? "This checkout session is successful. Payment actions are locked and shown for reference only."
+                    : "This checkout session is failed. Payment actions are locked and shown for reference only."}
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={processing || cancelling}>
+                  {processing ? "Processing..." : "Pay Now"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={processing || cancelling}
+                  onClick={handleCancel}
+                >
+                  {cancelling ? "Cancelling..." : "Cancel"}
+                </Button>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>

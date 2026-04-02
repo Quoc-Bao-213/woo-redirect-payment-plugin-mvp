@@ -1,4 +1,4 @@
-﻿import { db } from "@/db";
+import { db } from "@/db";
 import { ApiError } from "@/lib/http";
 import { and, desc, eq } from "drizzle-orm";
 import { simulatePayment } from "@/features/payment/simulator";
@@ -21,7 +21,6 @@ import {
   generateEventId,
   generateOrderId,
   addMinutesToDate,
-  generateSessionId,
   resolveAppBaseUrl,
   signWebhookPayload,
   getWebhookSharedSecret,
@@ -112,7 +111,7 @@ async function getSessionBySessionId(sessionId: string) {
   const [session] = await db
     .select()
     .from(sessions)
-    .where(eq(sessions.sessionId, sessionId))
+    .where(eq(sessions.id, sessionId))
     .limit(1);
 
   return session ?? null;
@@ -220,13 +219,11 @@ export async function createDemoSession(
   const amount = input.amount ?? DEFAULT_AMOUNT;
   const currency = normalizeCurrency(input.currency);
   const now = new Date();
-  const sessionId = generateSessionId();
   const orderId = generateOrderId();
 
   const [createdSession] = await db
     .insert(sessions)
     .values({
-      sessionId,
       orderId,
       amount,
       currency,
@@ -240,10 +237,10 @@ export async function createDemoSession(
   const baseUrl = resolveAppBaseUrl(origin);
 
   return {
-    sessionId: createdSession.sessionId,
+    sessionId: createdSession.id,
     orderId: createdSession.orderId,
     status: createdSession.status,
-    checkoutUrl: `${baseUrl}/checkout/${createdSession.sessionId}`,
+    checkoutUrl: `${baseUrl}/checkout/${createdSession.id}`,
   };
 }
 
@@ -262,7 +259,7 @@ export async function getDemoSession(
   ]);
 
   return {
-    sessionId: session.sessionId,
+    sessionId: session.id,
     orderId: session.orderId,
     amount: session.amount,
     currency: session.currency,
@@ -316,7 +313,7 @@ export async function processDemoPayment(
       simulationResult.sessionStatus === "succeeded"
         ? "payment.succeeded"
         : "payment.failed",
-    sessionId: session.sessionId,
+    sessionId: session.id,
     orderId: session.orderId,
     status: simulationResult.sessionStatus,
     attemptNumber: nextAttemptNumber,
@@ -333,10 +330,10 @@ export async function processDemoPayment(
       attemptCount: nextAttemptNumber,
       updatedAt: new Date(),
     })
-    .where(eq(sessions.sessionId, session.sessionId));
+    .where(eq(sessions.id, session.id));
 
   await db.insert(paymentAttempts).values({
-    sessionId: session.sessionId,
+    sessionId: session.id,
     attemptNumber: nextAttemptNumber,
     maskedCardNumber: maskCardNumber(input.cardNumber),
     status: simulationResult.attemptStatus,
@@ -346,7 +343,7 @@ export async function processDemoPayment(
   });
 
   await db.insert(webhookEvents).values({
-    sessionId: session.sessionId,
+    sessionId: session.id,
     eventId: webhookPayload.eventId,
     eventType: webhookPayload.eventType,
     payload: webhookPayload,
@@ -413,7 +410,7 @@ export async function cancelDemoPayment(
   const webhookPayload: InternalWebhookPayload = {
     eventId: generateEventId(),
     eventType: "payment.cancelled",
-    sessionId: session.sessionId,
+    sessionId: session.id,
     orderId: session.orderId,
     status: "cancelled",
     attemptNumber: null,
@@ -424,7 +421,7 @@ export async function cancelDemoPayment(
   };
 
   await db.insert(webhookEvents).values({
-    sessionId: session.sessionId,
+    sessionId: session.id,
     eventId: webhookPayload.eventId,
     eventType: webhookPayload.eventType,
     payload: webhookPayload,
@@ -503,7 +500,7 @@ export async function processPaymentWebhook(
       status: nextStatus,
       updatedAt: new Date(),
     })
-    .where(eq(sessions.sessionId, parsed.sessionId));
+    .where(eq(sessions.id, parsed.sessionId));
 
   await db
     .update(webhookEvents)
@@ -532,12 +529,12 @@ export async function getLatestDemoStatus(): Promise<LatestStatus | null> {
   }
 
   const [latestAttempt, webhookDelivered] = await Promise.all([
-    getLatestAttempt(latestSession.sessionId),
-    isWebhookDelivered(latestSession.sessionId),
+    getLatestAttempt(latestSession.id),
+    isWebhookDelivered(latestSession.id),
   ]);
 
   return {
-    sessionId: latestSession.sessionId,
+    sessionId: latestSession.id,
     orderId: latestSession.orderId,
     status: latestSession.status,
     attemptCount: latestSession.attemptCount,
