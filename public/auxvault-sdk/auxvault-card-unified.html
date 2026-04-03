@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuxVault Unified Card Field</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: transparent;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            min-height: 44px;
+        }
+
+        .card-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 0;
+            width: 100%;
+            align-items: center;
+            height: 44px;
+        }
+
+        .field-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Add separator dots between fields */
+        .field-wrapper:not(:last-child)::after {
+            content: '·';
+            position: absolute;
+            right: 0;
+            color: #999;
+            font-size: 20px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        input {
+            width: 100%;
+            height: 44px;
+            padding: 0 16px;
+            border: none;
+            background: transparent;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+            color: inherit;
+        }
+
+        /* Add extra padding to the right of first two fields to make room for separator */
+        #cardNumber, #cardExpiry {
+            padding-right: 24px;
+        }
+
+        input::placeholder {
+            color: #999;
+            opacity: 1;
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="card-container">
+        <div class="field-wrapper">
+            <input type="text" 
+                   id="cardNumber" 
+                   placeholder="Card number" 
+                   maxlength="19"
+                   autocomplete="cc-number"
+                   inputmode="numeric">
+        </div>
+        <div class="field-wrapper">
+            <input type="text" 
+                   id="cardExpiry" 
+                   placeholder="MM/YY" 
+                   maxlength="7"
+                   autocomplete="cc-exp"
+                   inputmode="numeric">
+        </div>
+        <div class="field-wrapper">
+            <input type="text" 
+                   id="cardCvv" 
+                   placeholder="CVC" 
+                   maxlength="4"
+                   autocomplete="cc-csc"
+                   inputmode="numeric">
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const cardNumberInput = document.getElementById('cardNumber');
+            const cardExpiryInput = document.getElementById('cardExpiry');
+            const cardCvvInput = document.getElementById('cardCvv');
+
+            // Check if card is American Express (starts with 3)
+            function isAmex(cardNumber) {
+                const digits = cardNumber.replace(/\s/g, '');
+                return digits.charAt(0) === '3';
+            }
+
+            // Format card number with spaces
+            function formatCardNumber(value) {
+                const digits = value.replace(/\s/g, '');
+                const isAmexCard = isAmex(digits);
+                
+                // Amex: 4-6-5 format (e.g., 3782 822463 10005)
+                // Others: 4-4-4-4 format
+                if (isAmexCard) {
+                    const match = digits.match(/^(\d{0,4})(\d{0,6})(\d{0,5})$/);
+                    if (match) {
+                        return [match[1], match[2], match[3]]
+                            .filter(group => group.length > 0)
+                            .join(' ');
+                    }
+                } else {
+                    return digits.match(/.{1,4}/g)?.join(' ') || digits;
+                }
+                return value;
+            }
+
+            // Format expiry as MM / YY
+            function formatExpiry(value) {
+                value = value.replace(/\D/g, '');
+                if (value.length >= 2) {
+                    value = value.slice(0, 2) + ' / ' + value.slice(2, 4);
+                }
+                return value;
+            }
+
+            // Format CVV (numbers only)
+            function formatCvv(value) {
+                return value.replace(/\D/g, '');
+            }
+
+            // Card number input handler
+            cardNumberInput.addEventListener('input', function(e) {
+                const cursorPos = e.target.selectionStart;
+                const oldLen = e.target.value.length;
+                const digits = e.target.value.replace(/\s/g, '');
+                const isAmexCard = isAmex(digits);
+                
+                // Update maxlength based on card type
+                // Amex: 15 digits + 2 spaces = 17 chars
+                // Others: 16 digits + 3 spaces = 19 chars
+                e.target.maxLength = isAmexCard ? 17 : 19;
+                
+                e.target.value = formatCardNumber(e.target.value);
+                const newLen = e.target.value.length;
+                
+                // Adjust cursor position after formatting
+                if (newLen > oldLen) {
+                    e.target.setSelectionRange(cursorPos + (newLen - oldLen), cursorPos + (newLen - oldLen));
+                }
+
+                // Auto-tab to expiry when complete
+                // Amex: 15 digits, Others: 16 digits
+                const requiredLength = isAmexCard ? 15 : 16;
+                if (digits.length >= requiredLength) {
+                    cardExpiryInput.focus();
+                }
+
+                notifyParent('change', { field: 'cardNumber', value: e.target.value });
+            });
+
+            // Expiry input handler
+            cardExpiryInput.addEventListener('input', function(e) {
+                const cursorPos = e.target.selectionStart;
+                const oldLen = e.target.value.length;
+                e.target.value = formatExpiry(e.target.value);
+                const newLen = e.target.value.length;
+                
+                // Adjust cursor position
+                if (newLen > oldLen) {
+                    e.target.setSelectionRange(cursorPos + (newLen - oldLen), cursorPos + (newLen - oldLen));
+                }
+
+                // Auto-tab to CVV when complete (MM / YY = 7 chars)
+                if (e.target.value.length >= 7) {
+                    cardCvvInput.focus();
+                }
+
+                notifyParent('change', { field: 'cardExpiry', value: e.target.value });
+            });
+
+            // CVV input handler
+            cardCvvInput.addEventListener('input', function(e) {
+                e.target.value = formatCvv(e.target.value);
+                
+                // Get the card number to determine if it's Amex
+                const cardDigits = cardNumberInput.value.replace(/\s/g, '');
+                const isAmexCard = isAmex(cardDigits);
+                
+                // Amex CVV is 4 digits, others are 3 digits
+                e.target.maxLength = isAmexCard ? 4 : 3;
+                
+                notifyParent('change', { field: 'cardCvv', value: e.target.value });
+            });
+
+            // Backspace handling for auto-tab back
+            cardExpiryInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Backspace' && e.target.value === '') {
+                    cardNumberInput.focus();
+                    cardNumberInput.setSelectionRange(cardNumberInput.value.length, cardNumberInput.value.length);
+                }
+            });
+
+            cardCvvInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Backspace' && e.target.value === '') {
+                    cardExpiryInput.focus();
+                    cardExpiryInput.setSelectionRange(cardExpiryInput.value.length, cardExpiryInput.value.length);
+                }
+            });
+
+            function notifyParent(type, payload) {
+                window.parent.postMessage({
+                    source: 'auxvault-field',
+                    fieldType: 'card',
+                    type: type,
+                    payload: payload
+                }, '*');
+            }
+
+            // Listen for messages from parent
+            window.addEventListener('message', (e) => {
+                const d = e.data;
+                if (!d || d.source !== 'auxvault-parent') return;
+
+                if (d.type === 'configure') {
+                    // Field is configured
+                    setTimeout(() => {
+                        notifyParent('ready', {});
+                        cardNumberInput.focus();
+                    }, 50);
+                }
+
+                if (d.type === 'getValue') {
+                    // Return all three values
+                    const values = {
+                        cardNumber: cardNumberInput.value.replace(/\s/g, ''),
+                        cardExpiry: cardExpiryInput.value.replace(/\s/g, ''),
+                        cardCvv: cardCvvInput.value
+                    };
+
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        fieldType: 'card',
+                        type: 'value',
+                        requestId: d.requestId,
+                        value: values
+                    }, '*');
+                }
+
+                if (d.type === 'setValue') {
+                    // Set all three values if provided
+                    if (d.value) {
+                        if (d.value.cardNumber !== undefined) {
+                            cardNumberInput.value = formatCardNumber(d.value.cardNumber);
+                        }
+                        if (d.value.cardExpiry !== undefined) {
+                            cardExpiryInput.value = formatExpiry(d.value.cardExpiry);
+                        }
+                        if (d.value.cardCvv !== undefined) {
+                            cardCvvInput.value = d.value.cardCvv;
+                        }
+                    }
+                }
+
+                if (d.type === 'clear') {
+                    cardNumberInput.value = '';
+                    cardExpiryInput.value = '';
+                    cardCvvInput.value = '';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

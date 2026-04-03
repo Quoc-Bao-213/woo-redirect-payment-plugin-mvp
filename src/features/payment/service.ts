@@ -1,4 +1,4 @@
-import { db } from "@/db";
+﻿import { db } from "@/db";
 import { ApiError } from "@/lib/http";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { simulatePayment } from "@/features/payment/simulator";
@@ -13,6 +13,7 @@ import {
 import {
   type PayInput,
   type CancelInput,
+  type SdkResultInput,
   webhookPayloadSchema,
   type CreateSessionInput,
 } from "@/features/payment/schemas";
@@ -221,6 +222,76 @@ function resolveIncomingStatus(
   return incomingStatus;
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function normalizeSdkResultStatus(
+  input: SdkResultInput,
+): "succeeded" | "failed" {
+  if (input.status === "succeeded" || input.status === "failed") {
+    return input.status;
+  }
+
+  if (input.success === true || input.approved === true) {
+    return "succeeded";
+  }
+
+  if (input.success === false || input.approved === false) {
+    return "failed";
+  }
+
+  throw new ApiError(
+    400,
+    "SDK_RESULT_STATUS_REQUIRED",
+    "SDK result must include a recognizable success/failed status",
+  );
+}
+
+function normalizeSdkTransactionId(transactionId?: string | null) {
+  if (!transactionId) {
+    return null;
+  }
+
+  const normalized = transactionId.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return isUuid(normalized) ? normalized : null;
+}
+
+function normalizeMaskedCard(maskedCardNumber?: string | null) {
+  if (!maskedCardNumber) {
+    return "sdk-tokenized";
+  }
+
+  const normalized = maskedCardNumber.trim();
+  return normalized || "sdk-tokenized";
+}
+
+function truncateForStorage(
+  value: string | null | undefined,
+  maxLength: number,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length > maxLength
+    ? normalized.slice(0, maxLength)
+    : normalized;
+}
+
 export async function createDemoSession(
   input: CreateSessionInput,
   origin?: string,
@@ -388,6 +459,106 @@ export async function processDemoPayment(
     transactionId: simulationResult.transactionId,
     responseCode: simulationResult.responseCode,
     responseMessage: simulationResult.responseMessage,
+    occurredAt: new Date().toISOString(),
+  };
+
+  await db.insert(webhookEvents).values({
+    sessionId: session.id,
+    eventId: webhookPayload.eventId,
+    eventType: webhookPayload.eventType,
+    payload: webhookPayload,
+    processed: false,
+  });
+
+  await dispatchInternalWebhook(webhookPayload, origin);
+
+  return {
+    redirectTo: isSuccessAttempt ? "/result/success" : "/result/failed",
+    message: "Payment submitted. Final state will be updated by webhook.",
+  };
+}
+
+export async function processDemoSdkResult(
+  sessionId: string,
+  input: SdkResultInput,
+  origin?: string,
+) {
+  const session = await getSessionBySessionId(sessionId);
+
+  if (!session) {
+    throw new ApiError(
+      404,
+      "SESSION_NOT_FOUND",
+      "Checkout session was not found",
+    );
+  }
+
+  if (isExpired(session)) {
+    throw new ApiError(
+      409,
+      "SESSION_EXPIRED",
+      "This checkout session has expired",
+    );
+  }
+
+  if (!canAttempt(session)) {
+    throw new ApiError(
+      409,
+      "SESSION_NOT_PAYABLE",
+      "Session cannot accept more payment attempts",
+    );
+  }
+
+  const sdkStatus = normalizeSdkResultStatus(input);
+  const isSuccessAttempt = sdkStatus === "succeeded";
+  const nextAttemptNumber = session.attemptCount + 1;
+  const isFinalFailedAttempt =
+    !isSuccessAttempt && nextAttemptNumber >= session.maxAttempts;
+  const transactionId = normalizeSdkTransactionId(input.transactionId);
+  const responseCode =
+    truncateForStorage(input.responseCode, 32) ??
+    (isSuccessAttempt ? "00" : "05");
+  const responseMessage =
+    truncateForStorage(input.responseMessage, 255) ??
+    (isSuccessAttempt ? "Approved" : "Payment failed. Please retry.");
+
+  await db
+    .update(sessions)
+    .set({
+      customerEmail: input.email ?? session.customerEmail,
+      attemptCount: nextAttemptNumber,
+      updatedAt: new Date(),
+    })
+    .where(eq(sessions.id, session.id));
+
+  await db.insert(paymentAttempts).values({
+    sessionId: session.id,
+    attemptNumber: nextAttemptNumber,
+    maskedCardNumber: normalizeMaskedCard(input.maskedCardNumber),
+    status: isSuccessAttempt ? "succeeded" : "failed",
+    responseCode,
+    responseMessage,
+    transactionId,
+  });
+
+  if (!isSuccessAttempt && !isFinalFailedAttempt) {
+    return {
+      redirectTo: "/checkout",
+      message:
+        "Payment attempt failed. Please retry. Final status is not updated until terminal webhook.",
+    };
+  }
+
+  const webhookPayload: InternalWebhookPayload = {
+    eventId: generateEventId(),
+    eventType: isSuccessAttempt ? "payment.succeeded" : "payment.failed",
+    sessionId: session.id,
+    orderId: session.orderId,
+    status: isSuccessAttempt ? "succeeded" : "failed",
+    attemptNumber: nextAttemptNumber,
+    transactionId,
+    responseCode,
+    responseMessage,
     occurredAt: new Date().toISOString(),
   };
 

@@ -56,6 +56,18 @@ export const cancelInputSchema = z.object({
   reason: z.string().trim().max(120).optional(),
 });
 
+export const sdkResultInputSchema = z.object({
+  status: z.enum(["succeeded", "failed"]).optional(),
+  success: z.boolean().optional(),
+  approved: z.boolean().optional(),
+  responseCode: z.string().trim().min(1).max(128).nullable().optional(),
+  responseMessage: z.string().trim().min(1).max(4000).nullable().optional(),
+  transactionId: z.string().trim().min(1).max(128).nullable().optional(),
+  maskedCardNumber: z.string().trim().min(1).max(24).nullable().optional(),
+  email: z.string().trim().email().max(200).optional(),
+  raw: z.unknown().optional(),
+});
+
 export const webhookEventTypeSchema = z.enum([
   "payment.succeeded",
   "payment.failed",
@@ -78,4 +90,5 @@ export const webhookPayloadSchema = z.object({
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;
 export type PayInput = z.infer<typeof payInputSchema>;
 export type CancelInput = z.infer<typeof cancelInputSchema>;
+export type SdkResultInput = z.infer<typeof sdkResultInputSchema>;
 export type WebhookPayload = z.infer<typeof webhookPayloadSchema>;

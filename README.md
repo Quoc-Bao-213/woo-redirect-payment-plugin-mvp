@@ -509,3 +509,69 @@ This demo intentionally omits production concerns such as:
 - PCI-compliant card data processing pipeline
 
 It is focused on demonstrating redirect + webhook truth model in a compact codebase.
+
+## 15) V2 SDK Mode (Feature Flag)
+
+This project now supports two checkout UI modes on the same route (`/checkout/[sessionId]`):
+
+- `PAYMENT_UI_MODE=native` -> existing native card form (V1)
+- `PAYMENT_UI_MODE=sdk` -> LuqraToken SDK embedded fields (V2)
+
+Additional env vars for SDK mode:
+
+```env
+PAYMENT_UI_MODE=sdk
+NEXT_PUBLIC_AUXVAULT_API_KEY=<public-sdk-key>
+NEXT_PUBLIC_AUXVAULT_ENDPOINT=https://sandbox-api.auxvault.net/api/v1/public/transaction
+
+# Recommended: self-host SDK assets in this repo (public/auxvault-sdk)
+NEXT_PUBLIC_AUXVAULT_BASE_URL=/auxvault-sdk
+NEXT_PUBLIC_AUXVAULT_SCRIPT_SRC=/auxvault-sdk/auxVault.js
+NEXT_PUBLIC_AUXVAULT_VAULT_FILE=/auxvault-sdk/auxvault-field.html
+NEXT_PUBLIC_AUXVAULT_VAULT_CARD_FILE=/auxvault-sdk/auxvault-card-unified.html
+
+# Optional fallback to remote provider CDN
+# NEXT_PUBLIC_AUXVAULT_SCRIPT_SRC=https://luqratoken.com/sdk/auxVault.js
+# NEXT_PUBLIC_AUXVAULT_VAULT_FILE=https://luqratoken.com/sdk/auxvault-field.html
+```
+
+### New API (V2)
+
+## POST `/api/demo/session/[sessionId]/sdk-result`
+
+Purpose:
+
+- Ingest SDK transaction result from browser.
+- Keep same retry/webhook truth behavior as V1 backend logic.
+
+Behavior:
+
+- Always increments `attempt_count` and inserts `payment_attempts` row.
+- Success -> dispatch internal webhook `payment.succeeded`.
+- Failed attempt 1/2 -> no webhook, stay pending, redirect `/checkout`.
+- Failed attempt 3 -> dispatch internal webhook `payment.failed`.
+
+Accepted payload fields (normalized):
+
+```json
+{
+  "status": "succeeded",
+  "success": true,
+  "approved": true,
+  "responseCode": "00",
+  "responseMessage": "Approved",
+  "transactionId": "optional-provider-id",
+  "maskedCardNumber": "************1111",
+  "email": "customer@example.com",
+  "raw": {}
+}
+```
+
+Notes:
+
+- If provider transaction id is not UUID, it is not stored in `transaction_id` (set to `null`) to match current DB type.
+- If masked PAN is missing, backend stores fallback `sdk-tokenized`.
+- Final state still comes from webhook processing, not direct UI response.
+
+
+

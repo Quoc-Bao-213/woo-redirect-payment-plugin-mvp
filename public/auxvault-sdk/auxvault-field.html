@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuxVault Field</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: transparent;
+        }
+
+        input, select {
+            width: 100%;
+            height: 44px;
+            padding: 0 12px;
+            border: none;
+            background: transparent;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+            color: inherit;
+        }
+
+        input::placeholder {
+            color: #999;
+            opacity: 1;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body>
+    <div id="field-container"></div>
+
+    <script>
+        (function() {
+            let fieldType = '';
+            let fieldId = '';
+            let inputElement = null;
+            let currentCountry = 'US'; // Default to US
+
+            // US States and Territories
+            const US_STATES = [
+                { value: '', label: 'Select State' },
+                { value: 'AL', label: 'AL - Alabama' },
+                { value: 'AK', label: 'AK - Alaska' },
+                { value: 'AZ', label: 'AZ - Arizona' },
+                { value: 'AR', label: 'AR - Arkansas' },
+                { value: 'CA', label: 'CA - California' },
+                { value: 'CO', label: 'CO - Colorado' },
+                { value: 'CT', label: 'CT - Connecticut' },
+                { value: 'DE', label: 'DE - Delaware' },
+                { value: 'FL', label: 'FL - Florida' },
+                { value: 'GA', label: 'GA - Georgia' },
+                { value: 'HI', label: 'HI - Hawaii' },
+                { value: 'ID', label: 'ID - Idaho' },
+                { value: 'IL', label: 'IL - Illinois' },
+                { value: 'IN', label: 'IN - Indiana' },
+                { value: 'IA', label: 'IA - Iowa' },
+                { value: 'KS', label: 'KS - Kansas' },
+                { value: 'KY', label: 'KY - Kentucky' },
+                { value: 'LA', label: 'LA - Louisiana' },
+                { value: 'ME', label: 'ME - Maine' },
+                { value: 'MD', label: 'MD - Maryland' },
+                { value: 'MA', label: 'MA - Massachusetts' },
+                { value: 'MI', label: 'MI - Michigan' },
+                { value: 'MN', label: 'MN - Minnesota' },
+                { value: 'MS', label: 'MS - Mississippi' },
+                { value: 'MO', label: 'MO - Missouri' },
+                { value: 'MT', label: 'MT - Montana' },
+                { value: 'NE', label: 'NE - Nebraska' },
+                { value: 'NV', label: 'NV - Nevada' },
+                { value: 'NH', label: 'NH - New Hampshire' },
+                { value: 'NJ', label: 'NJ - New Jersey' },
+                { value: 'NM', label: 'NM - New Mexico' },
+                { value: 'NY', label: 'NY - New York' },
+                { value: 'NC', label: 'NC - North Carolina' },
+                { value: 'ND', label: 'ND - North Dakota' },
+                { value: 'OH', label: 'OH - Ohio' },
+                { value: 'OK', label: 'OK - Oklahoma' },
+                { value: 'OR', label: 'OR - Oregon' },
+                { value: 'PA', label: 'PA - Pennsylvania' },
+                { value: 'RI', label: 'RI - Rhode Island' },
+                { value: 'SC', label: 'SC - South Carolina' },
+                { value: 'SD', label: 'SD - South Dakota' },
+                { value: 'TN', label: 'TN - Tennessee' },
+                { value: 'TX', label: 'TX - Texas' },
+                { value: 'UT', label: 'UT - Utah' },
+                { value: 'VT', label: 'VT - Vermont' },
+                { value: 'VA', label: 'VA - Virginia' },
+                { value: 'WA', label: 'WA - Washington' },
+                { value: 'WV', label: 'WV - West Virginia' },
+                { value: 'WI', label: 'WI - Wisconsin' },
+                { value: 'WY', label: 'WY - Wyoming' },
+                { value: 'DC', label: 'DC - District of Columbia' },
+                { value: 'AS', label: 'AS - American Samoa' },
+                { value: 'GU', label: 'GU - Guam' },
+                { value: 'MP', label: 'MP - Northern Mariana Islands' },
+                { value: 'PR', label: 'PR - Puerto Rico' },
+                { value: 'VI', label: 'VI - U.S. Virgin Islands' }
+            ];
+
+            // Countries with billing codes
+            const COUNTRIES = [
+                { value: 'US', label: 'United States (+1)' },
+                { value: 'CA', label: 'Canada (+1)' },
+                { value: 'GB', label: 'United Kingdom (+44)' },
+                { value: 'AU', label: 'Australia (+61)' },
+                { value: 'DE', label: 'Germany (+49)' },
+                { value: 'FR', label: 'France (+33)' },
+                { value: 'IT', label: 'Italy (+39)' },
+                { value: 'ES', label: 'Spain (+34)' },
+                { value: 'NL', label: 'Netherlands (+31)' },
+                { value: 'BE', label: 'Belgium (+32)' },
+                { value: 'CH', label: 'Switzerland (+41)' },
+                { value: 'AT', label: 'Austria (+43)' },
+                { value: 'SE', label: 'Sweden (+46)' },
+                { value: 'NO', label: 'Norway (+47)' },
+                { value: 'DK', label: 'Denmark (+45)' },
+                { value: 'FI', label: 'Finland (+358)' },
+                { value: 'IE', label: 'Ireland (+353)' },
+                { value: 'PL', label: 'Poland (+48)' },
+                { value: 'PT', label: 'Portugal (+351)' },
+                { value: 'GR', label: 'Greece (+30)' },
+                { value: 'CZ', label: 'Czech Republic (+420)' },
+                { value: 'HU', label: 'Hungary (+36)' },
+                { value: 'RO', label: 'Romania (+40)' },
+                { value: 'BG', label: 'Bulgaria (+359)' },
+                { value: 'HR', label: 'Croatia (+385)' },
+                { value: 'SI', label: 'Slovenia (+386)' },
+                { value: 'SK', label: 'Slovakia (+421)' },
+                { value: 'LT', label: 'Lithuania (+370)' },
+                { value: 'LV', label: 'Latvia (+371)' },
+                { value: 'EE', label: 'Estonia (+372)' },
+                { value: 'JP', label: 'Japan (+81)' },
+                { value: 'CN', label: 'China (+86)' },
+                { value: 'KR', label: 'South Korea (+82)' },
+                { value: 'IN', label: 'India (+91)' },
+                { value: 'SG', label: 'Singapore (+65)' },
+                { value: 'HK', label: 'Hong Kong (+852)' },
+                { value: 'TW', label: 'Taiwan (+886)' },
+                { value: 'MY', label: 'Malaysia (+60)' },
+                { value: 'TH', label: 'Thailand (+66)' },
+                { value: 'PH', label: 'Philippines (+63)' },
+                { value: 'ID', label: 'Indonesia (+62)' },
+                { value: 'VN', label: 'Vietnam (+84)' },
+                { value: 'NZ', label: 'New Zealand (+64)' },
+                { value: 'MX', label: 'Mexico (+52)' },
+                { value: 'BR', label: 'Brazil (+55)' },
+                { value: 'AR', label: 'Argentina (+54)' },
+                { value: 'CL', label: 'Chile (+56)' },
+                { value: 'CO', label: 'Colombia (+57)' },
+                { value: 'PE', label: 'Peru (+51)' },
+                { value: 'VE', label: 'Venezuela (+58)' },
+                { value: 'ZA', label: 'South Africa (+27)' },
+                { value: 'EG', label: 'Egypt (+20)' },
+                { value: 'IL', label: 'Israel (+972)' },
+                { value: 'AE', label: 'United Arab Emirates (+971)' },
+                { value: 'SA', label: 'Saudi Arabia (+966)' },
+                { value: 'TR', label: 'Turkey (+90)' },
+                { value: 'RU', label: 'Russia (+7)' },
+                { value: 'UA', label: 'Ukraine (+380)' },
+                { value: 'BY', label: 'Belarus (+375)' },
+                { value: 'KZ', label: 'Kazakhstan (+7)' }
+            ];
+
+            const fieldConfigs = {
+                cardNumber: {
+                    type: 'text',
+                    placeholder: 'Card number',
+                    maxlength: 19,
+                    autocomplete: 'cc-number',
+                    inputmode: 'numeric',
+                    format: (val) => val.replace(/\s/g, '').match(/.{1,4}/g)?.join(' ') || val
+                },
+                cardExpiry: {
+                    type: 'text',
+                    placeholder: 'MM / YY',
+                    maxlength: 7,
+                    autocomplete: 'cc-exp',
+                    inputmode: 'numeric',
+                    format: (val) => {
+                        val = val.replace(/\D/g, '');
+                        if (val.length >= 2) val = val.slice(0, 2) + ' / ' + val.slice(2, 4);
+                        return val;
+                    },
+                    getValue: (val) => val.replace(/\s/g, '') // Return as MM/YY
+                },
+                cardCvv: {
+                    type: 'text',
+                    placeholder: 'CVV',
+                    maxlength: 4,
+                    autocomplete: 'cc-csc',
+                    inputmode: 'numeric',
+                    format: (val) => val.replace(/\D/g, '')
+                },
+                name: {
+                    type: 'text',
+                    placeholder: 'Full name',
+                    autocomplete: 'name'
+                },
+                email: {
+                    type: 'email',
+                    placeholder: 'Email address',
+                    autocomplete: 'email'
+                },
+                phone: {
+                    type: 'tel',
+                    placeholder: 'Phone number',
+                    autocomplete: 'tel'
+                },
+                address: {
+                    type: 'text',
+                    placeholder: 'Street address',
+                    autocomplete: 'street-address'
+                },
+                city: {
+                    type: 'text',
+                    placeholder: 'City',
+                    autocomplete: 'address-level2'
+                },
+                state: {
+                    type: 'select',
+                    placeholder: 'State',
+                    autocomplete: 'address-level1',
+                    options: US_STATES
+                },
+                postal: {
+                    type: 'text',
+                    placeholder: 'Postal code',
+                    autocomplete: 'postal-code'
+                },
+                country: {
+                    type: 'select',
+                    placeholder: 'Country',
+                    autocomplete: 'country',
+                    options: COUNTRIES
+                },
+                amount: {
+                    type: 'text',
+                    placeholder: 'Amount',
+                    inputmode: 'decimal',
+                    format: (val) => {
+                        // Remove any non-numeric characters except decimal point
+                        val = val.replace(/[^\d.]/g, '');
+                        // Only allow one decimal point
+                        const parts = val.split('.');
+                        if (parts.length > 2) {
+                            val = parts[0] + '.' + parts.slice(1).join('');
+                        }
+                        // Limit to 2 decimal places
+                        if (parts.length === 2 && parts[1].length > 2) {
+                            val = parts[0] + '.' + parts[1].slice(0, 2);
+                        }
+                        return val;
+                    },
+                    getValue: (val) => {
+                        // Parse and format to exactly 2 decimal places
+                        const num = parseFloat(val);
+                        return isNaN(num) ? '0.00' : num.toFixed(2);
+                    }
+                },
+                // Shipping fields
+                shippingName: {
+                    type: 'text',
+                    placeholder: 'Shipping name',
+                    autocomplete: 'shipping name'
+                },
+                shippingEmail: {
+                    type: 'email',
+                    placeholder: 'Shipping email',
+                    autocomplete: 'shipping email'
+                },
+                shippingPhone: {
+                    type: 'tel',
+                    placeholder: 'Shipping phone',
+                    autocomplete: 'shipping tel'
+                },
+                shippingAddress: {
+                    type: 'text',
+                    placeholder: 'Shipping address',
+                    autocomplete: 'shipping street-address'
+                },
+                shippingCity: {
+                    type: 'text',
+                    placeholder: 'Shipping city',
+                    autocomplete: 'shipping address-level2'
+                },
+                shippingState: {
+                    type: 'select',
+                    placeholder: 'Shipping state',
+                    autocomplete: 'shipping address-level1',
+                    options: US_STATES
+                },
+                shippingPostal: {
+                    type: 'text',
+                    placeholder: 'Shipping postal code',
+                    autocomplete: 'shipping postal-code'
+                },
+                shippingCountry: {
+                    type: 'select',
+                    placeholder: 'Shipping country',
+                    autocomplete: 'shipping country',
+                    options: COUNTRIES
+                }
+            };
+
+            function isUSCountry(countryCode) {
+                return countryCode === 'US';
+            }
+
+            function switchStateField(isUS) {
+                console.log("[State Field] switchStateField called, isUS:", isUS, "fieldType:", fieldType);
+                if (fieldType !== 'state') return;
+
+                const container = document.getElementById('field-container');
+                const currentValue = inputElement?.value || '';
+                
+                // Remove current input
+                if (inputElement) {
+                    container.removeChild(inputElement);
+                }
+
+                if (isUS) {
+                    // Create select dropdown for US
+                    inputElement = document.createElement('select');
+                    US_STATES.forEach(opt => {
+                        const option = document.createElement('option');
+                        option.value = opt.value;
+                        option.textContent = opt.label;
+                        inputElement.appendChild(option);
+                    });
+                    
+                    // Try to restore previous value if it was a valid state code
+                    if (currentValue && currentValue.length === 2) {
+                        inputElement.value = currentValue.toUpperCase();
+                    }
+                } else {
+                    // Create text input for non-US
+                    inputElement = document.createElement('input');
+                    inputElement.type = 'text';
+                    inputElement.placeholder = 'State/Province/Region';
+                    inputElement.autocomplete = 'address-level1';
+                    inputElement.value = currentValue;
+                }
+
+                // Re-attach event listeners
+                inputElement.addEventListener('input', function(e) {
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        fieldType,
+                        type: 'change',
+                        payload: { value: e.target.value }
+                    }, '*');
+                });
+
+                inputElement.addEventListener('change', function(e) {
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        fieldType,
+                        type: 'change',
+                        payload: { value: e.target.value }
+                    }, '*');
+                });
+
+                container.appendChild(inputElement);
+                setTimeout(() => inputElement.focus(), 50);
+            }
+
+            function createField(type) {
+                fieldType = type;
+                const config = fieldConfigs[type];
+                if (!config) return;
+
+                const container = document.getElementById('field-container');
+                
+                // Special handling for state field - check if we should use select or input
+                if (type === 'state') {
+                    switchStateField(isUSCountry(currentCountry));
+                } else if (config.type === 'select' || config.options) {
+                    // Create select element
+                    inputElement = document.createElement('select');
+                    config.options.forEach(opt => {
+                        const option = document.createElement('option');
+                        option.value = opt.value;
+                        option.textContent = opt.label;
+                        inputElement.appendChild(option);
+                    });
+                } else {
+                    // Create input element
+                    inputElement = document.createElement('input');
+                    inputElement.type = config.type || 'text';
+                    inputElement.placeholder = config.placeholder || '';
+                    if (config.maxlength) inputElement.maxLength = config.maxlength;
+                    if (config.autocomplete) inputElement.autocomplete = config.autocomplete;
+                    if (config.inputmode) inputElement.inputMode = config.inputmode;
+                    if (config.step) inputElement.step = config.step;
+                    if (config.min) inputElement.min = config.min;
+                }
+
+                // Handle input/change events
+                inputElement.addEventListener('input', function(e) {
+                    if (config.format) {
+                        const cursorPos = e.target.selectionStart;
+                        const oldLen = e.target.value.length;
+                        e.target.value = config.format(e.target.value);
+                        const newLen = e.target.value.length;
+                        if (newLen > oldLen) {
+                            e.target.setSelectionRange(cursorPos + (newLen - oldLen), cursorPos + (newLen - oldLen));
+                        }
+                    }
+
+                    // Notify parent
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        fieldType,
+                        type: 'change',
+                        payload: { value: e.target.value }
+                    }, '*');
+
+                    // If this is the country field, broadcast the country CODE (not the object)
+                    if (fieldType === 'country') {
+                        // Get the country code value (e.g., "US", "FR", "CA")
+                        const countryCode = e.target.value;
+                        console.log("[Country Field - Input] Broadcasting:", countryCode);
+                        window.parent.postMessage({
+                            source: 'auxvault-field-country',
+                            type: 'countryChange',
+                            country: countryCode
+                        }, '*');
+                    }
+                });
+
+                // For select elements, also listen to change event
+                inputElement.addEventListener('change', function(e) {
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        fieldType,
+                        type: 'change',
+                        payload: { value: e.target.value }
+                    }, '*');
+
+                    // If this is the country field, broadcast the country CODE (not the object)
+                    if (fieldType === 'country') {
+                        // Get the country code value (e.g., "US", "FR", "CA")
+                        const countryCode = e.target.value;
+                        console.log("[Country Field - Change] Broadcasting:", countryCode);
+                        window.parent.postMessage({
+                            source: 'auxvault-field-country',
+                            type: 'countryChange',
+                            country: countryCode
+                        }, '*');
+                    }
+                });
+
+                container.appendChild(inputElement);
+
+                // Notify ready
+                window.parent.postMessage({
+                    source: 'auxvault-field',
+                    fieldType,
+                    type: 'ready',
+                    payload: {}
+                }, '*');
+
+                // If this is the country field, broadcast the initial country value
+                if (fieldType === 'country' && inputElement) {
+                    setTimeout(() => {
+                        const initialCountryCode = inputElement.value || 'US';
+                        console.log("[Country Field - Initial] Broadcasting:", initialCountryCode);
+                        window.parent.postMessage({
+                            source: 'auxvault-field-country',
+                            type: 'countryChange',
+                            country: initialCountryCode
+                        }, '*');
+                    }, 150);
+                }
+
+                // Focus
+                setTimeout(() => inputElement.focus(), 100);
+            }
+
+            // Listen for configuration and country changes
+            window.addEventListener('message', (e) => {
+                const d = e.data;
+                if (!d) return;
+
+                // Listen for country changes from other iframes
+                if (d.source === 'auxvault-field-country' && d.type === 'countryChange') {
+                    console.log('[State Field] Received country change:', d.country, 'Current field type:', fieldType);
+                    currentCountry = d.country;
+                    if (fieldType === 'state') {
+                        const isUS = isUSCountry(d.country);
+                        console.log('[State Field] Is US country?', isUS, 'Switching field...');
+                        switchStateField(isUS);
+                    }
+                    return;
+                }
+
+                if (d.source !== 'auxvault-parent') return;
+
+                if (d.type === 'configure') {
+                    fieldId = d.fieldId;
+                    createField(d.fieldType);
+                    
+                    // Send ready message back to parent
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        type: 'ready',
+                        fieldType: d.fieldType,
+                        fieldId: fieldId
+                    }, '*');
+                }
+
+                if (d.type === 'getValue') {
+                    const config = fieldConfigs[fieldType];
+                    let value = inputElement?.value || '';
+                    
+                    // CRITICAL FIX: For select elements, ensure we get the selected option's VALUE attribute (the state code, not the index)
+                    if (inputElement && inputElement.tagName === 'SELECT') {
+                        // Double-check we're getting the value attribute, not the selectedIndex
+                        const selectedOption = inputElement.options[inputElement.selectedIndex];
+                        value = selectedOption?.value || '';
+                        
+                        // Extra validation for state field - ensure it's a string abbreviation
+                        if (fieldType === 'state' && value) {
+                            // Convert to uppercase and trim to ensure clean state code
+                            value = String(value).toUpperCase().trim();
+                            console.log('[State Field] getValue returning:', value, 'Type:', typeof value);
+                        }
+                    }
+                    
+                    // Special handling for country field - return object with code and name
+                    if ((fieldType === 'country' || fieldType === 'shippingCountry') && inputElement && inputElement.tagName === 'SELECT') {
+                        const selectedOption = inputElement.options[inputElement.selectedIndex];
+                        const countryCode = selectedOption?.value || '';
+                        const countryLabel = selectedOption?.textContent || '';
+                        // Extract billing code from label (e.g., "United States (+1)" -> "+1")
+                        const codeMatch = countryLabel.match(/\((\+\d+)\)/);
+                        const billingCode = codeMatch ? codeMatch[1] : '+1';
+                        
+                        // Find the country name (without the code)
+                        const countryName = countryLabel.replace(/\s*\(\+\d+\)\s*$/, '').trim();
+                        
+                        value = {
+                            code: countryCode,
+                            name: countryName,
+                            billingCode: billingCode
+                        };
+                    }
+                    
+                    // Apply getValue transform if exists (but not for objects like country)
+                    if (config && config.getValue && typeof value === 'string') {
+                        value = config.getValue(value);
+                    }
+
+                    window.parent.postMessage({
+                        source: 'auxvault-field',
+                        fieldType,
+                        fieldId,
+                        type: 'value',
+                        requestId: d.requestId,
+                        value: typeof value === 'string' ? value.trim() : value
+                    }, '*');
+                }
+
+                if (d.type === 'setValue') {
+                    if (inputElement) {
+                        inputElement.value = d.value || '';
+                        
+                        // If setting country value, broadcast the country CODE change
+                        if (fieldType === 'country') {
+                            const countryCode = d.value || '';
+                            window.parent.postMessage({
+                                source: 'auxvault-field-country',
+                                type: 'countryChange',
+                                country: countryCode
+                            }, '*');
+                        }
+                    }
+                }
+
+                if (d.type === 'setReadonly') {
+                    if (inputElement) {
+                        if (d.readonly) {
+                            inputElement.setAttribute('readonly', 'readonly');
+                            inputElement.style.cursor = 'not-allowed';
+                            inputElement.style.background = '#f5f5f5';
+                            inputElement.style.color = '#666';
+                        } else {
+                            inputElement.removeAttribute('readonly');
+                            inputElement.style.cursor = '';
+                            inputElement.style.background = 'transparent';
+                            inputElement.style.color = 'inherit';
+                        }
+                    }
+                }
+
+                if (d.type === 'clear') {
+                    if (inputElement) {
+                        inputElement.value = '';
+                    }
+                }
+            });
+
+            // Check for field type in URL (for testing)
+            const params = new URLSearchParams(window.location.search);
+            const urlFieldType = params.get('field');
+            if (urlFieldType) {
+                createField(urlFieldType);
+            }
+        })();
+    </script>
+</body>
+</html>
