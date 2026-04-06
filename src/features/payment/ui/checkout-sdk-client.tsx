@@ -63,6 +63,8 @@ type ParsedSdkResult = {
   raw?: unknown;
 };
 
+type CardBrand = "visa" | "amex";
+
 const sdkTestCards = [
   "VISA - 4111 1111 1111 1111 • Exp: 12/28 • CVV: 123",
   "AMEX - 3782 8224631 0005 • Exp: 12/28 • CVV: 0000",
@@ -73,6 +75,24 @@ function formatAmount(amount: number, currency: string) {
     style: "currency",
     currency,
   }).format(amount / 100);
+}
+
+function detectCardBrand(text: string): CardBrand | null {
+  const digits = text.replace(/\D/g, "");
+
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.startsWith("4")) {
+    return "visa";
+  }
+
+  if (digits.startsWith("34") || digits.startsWith("37")) {
+    return "amex";
+  }
+
+  return null;
 }
 
 async function readErrorMessage(response: Response) {
@@ -280,6 +300,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
   const [sdkResultText, setSdkResultText] = useState("");
   const [lastProcessedFingerprint, setLastProcessedFingerprint] = useState("");
+  const [cardBrand, setCardBrand] = useState<CardBrand | null>(null);
 
   const sdkApiKey = process.env.NEXT_PUBLIC_AUXVAULT_API_KEY ?? "";
   const sdkEndpoint = process.env.NEXT_PUBLIC_AUXVAULT_ENDPOINT ?? "";
@@ -458,6 +479,38 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
       observer.disconnect();
     };
   }, [sessionId]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as
+        | {
+            source?: string;
+            fieldType?: string;
+            type?: string;
+            payload?: { field?: string; value?: string };
+          }
+        | undefined;
+
+      if (!data || data.source !== "auxvault-field" || data.type !== "change") {
+        return;
+      }
+
+      if (data.fieldType === "cardNumber") {
+        setCardBrand(detectCardBrand(data.payload?.value ?? ""));
+        return;
+      }
+
+      if (data.fieldType === "card" && data.payload?.field === "cardNumber") {
+        setCardBrand(detectCardBrand(data.payload.value ?? ""));
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -696,7 +749,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="min-h-screen bg-slate-100/95 text-slate-900">
-      <div className="mx-auto w-full max-w-[1120px] px-4 py-5 md:px-6 md:py-6">
+      <div className="mx-auto w-full max-w-280 px-4 py-5 md:px-6 md:py-6">
         <div className="mb-5">
           <Button type="button" variant="outline" className="bg-white" asChild>
             <Link href="/">Back to Homepage</Link>
@@ -723,12 +776,12 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                   onChange={(event) => setEmail(event.target.value)}
                   disabled={isPaymentLockedSession || processing || cancelling}
                   placeholder="example@example.com"
-                  className="h-[52px] rounded-xl border-slate-300 bg-white text-lg"
+                  className="h-13 rounded-xl border-slate-300 bg-white text-lg"
                 />
               </div>
             </section>
 
-            <section className="space-y-3">
+            <section className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-7">
                 <h3 className="text-2xl font-semibold text-slate-950 md:text-3xl">
                   Payment Method
@@ -745,7 +798,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                 </div>
               </div>
 
-              <div className="relative rounded-2xl border border-slate-300/90 bg-white/70 px-4 pb-4 pt-7 md:px-5 md:pb-5 md:pt-8">
+              <div className="relative mt-2 rounded-2xl border border-slate-300/90 bg-white/70 px-4 pb-4 pt-7 md:px-5 md:pb-5 md:pt-8">
                 <div className="absolute top-0 left-4 -translate-y-1/2 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-800">
                   <ShieldCheck className="size-4" />
                   Secure SDK Container
@@ -761,12 +814,20 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                     <div className="relative">
                       <CreditCard className="pointer-events-none absolute top-1/2 left-3 z-10 size-5 -translate-y-1/2 text-blue-600" />
                       <div
-                        className="field min-h-[52px] rounded-xl border border-slate-300 bg-white px-10 py-2 pr-16"
+                        className="field min-h-13 rounded-xl border border-slate-300 bg-white px-10 py-2 pr-16"
                         data-auxvault="cardNumber"
                       />
-                      <span className="pointer-events-none absolute top-1/2 right-3 z-10 -translate-y-1/2 rounded bg-indigo-700 px-2 py-1 text-[10px] font-bold text-white">
-                        VISA
-                      </span>
+                      {cardBrand ? (
+                        <span
+                          className={`pointer-events-none absolute top-1/2 right-3 z-10 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-bold text-white ${
+                            cardBrand === "visa"
+                              ? "bg-indigo-700"
+                              : "bg-sky-600"
+                          }`}
+                        >
+                          {cardBrand === "visa" ? "VISA" : "AMEX"}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -776,7 +837,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                         Expiration Date
                       </Label>
                       <div
-                        className="field min-h-[52px] rounded-xl border border-slate-300 bg-white px-3 py-2"
+                        className="field min-h-13 rounded-xl border border-slate-300 bg-white px-3 py-2"
                         data-auxvault="cardExpiry"
                       />
                     </div>
@@ -785,7 +846,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                         Security Code (CVV)
                       </Label>
                       <div
-                        className="field min-h-[52px] rounded-xl border border-slate-300 bg-white px-3 py-2"
+                        className="field min-h-13 rounded-xl border border-slate-300 bg-white px-3 py-2"
                         data-auxvault="cardCvv"
                       />
                     </div>
@@ -804,7 +865,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                       disabled={
                         isPaymentLockedSession || processing || cancelling
                       }
-                      className="h-[52px] rounded-xl border-slate-300 bg-white text-lg"
+                      className="h-13 rounded-xl border-slate-300 bg-white text-lg"
                     />
                   </div>
                 </div>
@@ -864,25 +925,38 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
             </div>
 
             <div className="space-y-3 pt-2">
-              <Button
-                type="button"
-                ref={sdkPayButtonRef}
-                data-auxvault-button="pay"
-                className="h-[60px] w-full rounded-2xl bg-blue-600 text-lg font-semibold text-white shadow-[0_8px_18px_rgba(37,99,235,0.35)] hover:bg-blue-700"
-                disabled={
-                  processing ||
-                  cancelling ||
-                  isSdkConfigMissing ||
-                  Boolean(sdkInitError) ||
-                  !sdkScriptLoaded ||
-                  isPaymentLockedSession
-                }
-              >
-                <Lock className="size-5" />
-                {processing
-                  ? "Processing..."
-                  : `Pay ${formatAmount(session.amount, session.currency)}`}
-              </Button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  ref={sdkPayButtonRef}
+                  data-auxvault-button="pay"
+                  className="h-15 flex-1 rounded-2xl bg-blue-600 text-lg font-semibold text-white shadow-[0_8px_18px_rgba(37,99,235,0.35)] hover:bg-blue-700"
+                  disabled={
+                    processing ||
+                    cancelling ||
+                    isSdkConfigMissing ||
+                    Boolean(sdkInitError) ||
+                    !sdkScriptLoaded ||
+                    isPaymentLockedSession
+                  }
+                >
+                  <Lock className="size-5" />
+                  {processing
+                    ? "Processing..."
+                    : `Pay ${formatAmount(session.amount, session.currency)}`}
+                </Button>
+                {!isPaymentLockedSession ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-15 min-w-36 rounded-2xl bg-white"
+                    onClick={handleCancel}
+                    disabled={processing || cancelling}
+                  >
+                    {cancelling ? "Cancelling..." : "Cancel"}
+                  </Button>
+                ) : null}
+              </div>
 
               <div className="text-center text-sm text-slate-600">
                 <p className="inline-flex items-center gap-1.5">
@@ -894,19 +968,6 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                   <span className="font-semibold">LuqraToken SDK</span>
                 </p>
               </div>
-
-              {!isPaymentLockedSession ? (
-                <div className="flex justify-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleCancel}
-                    disabled={processing || cancelling}
-                  >
-                    {cancelling ? "Cancelling..." : "Cancel checkout"}
-                  </Button>
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -953,7 +1014,7 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
                 <span>Tax</span>
                 <span>{formatAmount(0, session.currency)}</span>
               </div>
-              <div className="flex items-center justify-between pt-1 text-3xl font-semibold text-slate-950">
+              <div className="mt-2 flex items-center justify-between border-t border-slate-300 pt-3 text-3xl font-semibold text-slate-950">
                 <span>Total</span>
                 <span>{formatAmount(session.amount, session.currency)}</span>
               </div>
