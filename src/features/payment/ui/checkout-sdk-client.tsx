@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/features/payment/ui/status-badge";
-import { StepTracker } from "@/features/payment/ui/step-tracker";
+import { type SessionStatus } from "@/features/payment/ui/flow-stage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -16,10 +16,6 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
-import {
-  type SessionStatus,
-  deriveFlowStageFromSession,
-} from "@/features/payment/ui/flow-stage";
 
 type SessionDetail = {
   sessionId: string;
@@ -318,26 +314,6 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
     session?.status === "succeeded" ||
     session?.status === "cancelled" ||
     Boolean(isRetryExhausted);
-
-  const flowStateBase = deriveFlowStageFromSession(
-    session
-      ? {
-          status: session.status,
-          attemptCount: session.attemptCount,
-          webhookDelivered: session.webhookDelivered,
-        }
-      : null,
-    "checkout",
-  );
-
-  const flowState: ReturnType<typeof deriveFlowStageFromSession> =
-    processing || cancelling
-      ? {
-          stage: "webhook_processing",
-          statusVariant: "processing",
-          activeStep: 4,
-        }
-      : flowStateBase;
 
   const loadSession = useCallback(async () => {
     try {
@@ -733,13 +709,6 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
   return (
     <div className="relative mx-auto grid w-full max-w-6xl gap-6 px-4 py-5 md:grid-cols-[1fr_380px] md:px-6">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
-
-      <StepTracker
-        className="md:col-span-2"
-        stage={flowState.stage}
-        activeStep={flowState.activeStep}
-        statusVariant={flowState.statusVariant}
-      />
 
       <div className="md:col-span-2">
         <Button type="button" variant="outline" asChild>

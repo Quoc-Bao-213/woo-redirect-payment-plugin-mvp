@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/features/payment/ui/status-badge";
-import { StepTracker } from "@/features/payment/ui/step-tracker";
+import { type SessionStatus } from "@/features/payment/ui/flow-stage";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -15,10 +15,6 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
-import {
-  type SessionStatus,
-  deriveFlowStageFromSession,
-} from "@/features/payment/ui/flow-stage";
 
 type LatestStatus = {
   sessionId: string;
@@ -100,17 +96,6 @@ export function HomeClient() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [amountInput, setAmountInput] = useState(DEFAULT_AMOUNT);
-
-  const flowState = deriveFlowStageFromSession(
-    latestStatus
-      ? {
-          status: latestStatus.status,
-          attemptCount: latestStatus.attemptCount,
-          webhookDelivered: latestStatus.webhookDelivered,
-        }
-      : null,
-    "home",
-  );
 
   useEffect(() => {
     let active = true;
@@ -215,12 +200,6 @@ export function HomeClient() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <StepTracker
-            stage={flowState.stage}
-            activeStep={flowState.activeStep}
-            statusVariant={flowState.statusVariant}
-          />
-
           <div className="grid gap-2 md:grid-cols-[340px_auto] md:items-end md:gap-x-3">
             <div className="grid gap-1.5">
               <Label htmlFor="amount-minor">Amount (USD minor unit)</Label>

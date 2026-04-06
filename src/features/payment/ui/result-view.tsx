@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusBadge } from "@/features/payment/ui/status-badge";
-import { StepTracker } from "@/features/payment/ui/step-tracker";
+import { type SessionStatus } from "@/features/payment/ui/flow-stage";
 import {
   Card,
   CardTitle,
@@ -12,10 +12,6 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
-import {
-  type SessionStatus,
-  deriveFlowStageFromSession,
-} from "@/features/payment/ui/flow-stage";
 
 type ResultSession = {
   sessionId: string;
@@ -84,40 +80,11 @@ export function ResultView({
     };
   }, [sessionId]);
 
-  const flowState = useMemo(() => {
-    if (session) {
-      return deriveFlowStageFromSession(
-        {
-          status: session.status,
-          attemptCount: session.attemptCount,
-          webhookDelivered: session.webhookDelivered,
-        },
-        "result",
-      );
-    }
-
-    if (sessionId) {
-      return {
-        stage: "webhook_processing" as const,
-        activeStep: 4,
-        statusVariant: "processing" as const,
-      };
-    }
-
-    return deriveFlowStageFromSession(null, "result");
-  }, [session, sessionId]);
-
   const displayedStatus = session?.status ?? expectedStatus;
 
   return (
     <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 md:px-6">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-52 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
-
-      <StepTracker
-        stage={flowState.stage}
-        activeStep={flowState.activeStep}
-        statusVariant={flowState.statusVariant}
-      />
 
       <Card className="border-teal-300/80 shadow-sm">
         <CardHeader>
