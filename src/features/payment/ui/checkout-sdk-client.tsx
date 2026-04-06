@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/features/payment/ui/status-badge";
+import { CreditCard, Lock, ShieldCheck, Tag } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type SessionStatus } from "@/features/payment/ui/flow-stage";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -67,10 +67,6 @@ const sdkTestCards = [
   "VISA - 4111 1111 1111 1111 • Exp: 12/28 • CVV: 123",
   "AMEX - 3782 8224631 0005 • Exp: 12/28 • CVV: 0000",
 ] as const;
-
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("en-US");
-}
 
 function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -299,14 +295,6 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
   const sdkScriptSrc =
     process.env.NEXT_PUBLIC_AUXVAULT_SCRIPT_SRC ?? `${sdkBaseUrl}/auxVault.js`;
   const isSdkConfigMissing = !sdkApiKey || !sdkEndpoint;
-
-  const remainingAttempts = useMemo(() => {
-    if (!session) {
-      return 0;
-    }
-
-    return Math.max(session.maxAttempts - session.attemptCount, 0);
-  }, [session]);
 
   const isRetryExhausted =
     session?.status === "failed" && session.attemptCount >= session.maxAttempts;
@@ -707,219 +695,288 @@ export function CheckoutSdkClient({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="relative mx-auto grid w-full max-w-6xl gap-6 px-4 py-5 md:grid-cols-[1fr_380px] md:px-6">
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56 bg-linear-to-b from-cyan-300/85 via-sky-200/45 to-transparent" />
+    <div className="min-h-screen bg-slate-100/95 text-slate-900">
+      <div className="mx-auto w-full max-w-[1120px] px-4 py-5 md:px-6 md:py-6">
+        <div className="mb-5">
+          <Button type="button" variant="outline" className="bg-white" asChild>
+            <Link href="/">Back to Homepage</Link>
+          </Button>
+        </div>
 
-      <div className="md:col-span-2">
-        <Button type="button" variant="outline" asChild>
-          <Link href="/">Back to Homepage</Link>
-        </Button>
-      </div>
+        <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-10">
+          <div className="space-y-6">
+            <section className="space-y-3">
+              <h2 className="text-2xl font-semibold text-slate-950 md:text-3xl">
+                Contact Information
+              </h2>
+              <div className="grid gap-1.5">
+                <Label
+                  htmlFor="sdk-email"
+                  className="text-base font-medium text-slate-900"
+                >
+                  Email
+                </Label>
+                <Input
+                  id="sdk-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={isPaymentLockedSession || processing || cancelling}
+                  placeholder="example@example.com"
+                  className="h-[52px] rounded-xl border-slate-300 bg-white text-lg"
+                />
+              </div>
+            </section>
 
-      <Card className="border-teal-300/80 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-slate-900">
-            Hosted Checkout Demo (SDK)
-          </CardTitle>
-          <CardDescription className="text-base leading-relaxed text-slate-700">
-            Card data is collected by LuqraToken secure iframes. Final status is
-            still confirmed by webhook in backend.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="sdk-email">Customer email</Label>
-            <Input
-              id="sdk-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={isPaymentLockedSession || processing || cancelling}
-              placeholder="example@example.com"
-            />
-          </div>
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-7">
+                <h3 className="text-2xl font-semibold text-slate-950 md:text-3xl">
+                  Payment Method
+                </h3>
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <span className="rounded bg-indigo-500 px-2 py-1 text-white">
+                    VISA
+                  </span>
+                  <span className="h-5 w-3 rounded-full bg-rose-300" />
+                  <span className="h-5 w-3 rounded-full bg-amber-300" />
+                  <span className="rounded bg-sky-500 px-2 py-1 text-white">
+                    AMEX
+                  </span>
+                </div>
+              </div>
 
-          <div className="rounded-md border border-teal-300/70 bg-cyan-50/55 p-3 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">SDK Embed Fields</p>
-            <p>
-              These containers are hydrated by LuqraToken SDK and card data
-              never touches this app.
-            </p>
-          </div>
+              <div className="relative rounded-2xl border border-slate-300/90 bg-white/70 px-4 pb-4 pt-7 md:px-5 md:pb-5 md:pt-8">
+                <div className="absolute top-0 left-4 -translate-y-1/2 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-800">
+                  <ShieldCheck className="size-4" />
+                  Secure SDK Container
+                </div>
 
-          <div className="grid gap-2">
+                <div className="sr-only" data-auxvault="amount" />
+
+                <div className="grid gap-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-base font-medium text-slate-900">
+                      Card Number
+                    </Label>
+                    <div className="relative">
+                      <CreditCard className="pointer-events-none absolute top-1/2 left-3 z-10 size-5 -translate-y-1/2 text-blue-600" />
+                      <div
+                        className="field min-h-[52px] rounded-xl border border-slate-300 bg-white px-10 py-2 pr-16"
+                        data-auxvault="cardNumber"
+                      />
+                      <span className="pointer-events-none absolute top-1/2 right-3 z-10 -translate-y-1/2 rounded bg-indigo-700 px-2 py-1 text-[10px] font-bold text-white">
+                        VISA
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-1.5">
+                      <Label className="text-base font-medium text-slate-900">
+                        Expiration Date
+                      </Label>
+                      <div
+                        className="field min-h-[52px] rounded-xl border border-slate-300 bg-white px-3 py-2"
+                        data-auxvault="cardExpiry"
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label className="text-base font-medium text-slate-900">
+                        Security Code (CVV)
+                      </Label>
+                      <div
+                        className="field min-h-[52px] rounded-xl border border-slate-300 bg-white px-3 py-2"
+                        data-auxvault="cardCvv"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-1.5">
+                    <Label
+                      htmlFor="sdk-card-holder"
+                      className="text-base font-medium text-slate-900"
+                    >
+                      Name on Card
+                    </Label>
+                    <Input
+                      id="sdk-card-holder"
+                      placeholder="JOHN DOE"
+                      disabled={
+                        isPaymentLockedSession || processing || cancelling
+                      }
+                      className="h-[52px] rounded-xl border-slate-300 bg-white text-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {isSdkConfigMissing ? (
+              <Alert variant="destructive">
+                <AlertTitle>SDK configuration missing</AlertTitle>
+                <AlertDescription>
+                  Set NEXT_PUBLIC_AUXVAULT_API_KEY and
+                  NEXT_PUBLIC_AUXVAULT_ENDPOINT to enable SDK checkout mode.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {sdkInitError ? (
+              <Alert variant="destructive">
+                <AlertTitle>SDK initialization failed</AlertTitle>
+                <AlertDescription>{sdkInitError}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {actionError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Payment action failed</AlertTitle>
+                <AlertDescription>{actionError}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {isPaymentLockedSession ? (
+              <Alert>
+                <AlertTitle>
+                  {session.status === "succeeded"
+                    ? "Payment already completed"
+                    : session.status === "cancelled"
+                      ? "Payment cancelled"
+                      : "Payment failed (retries exhausted)"}
+                </AlertTitle>
+                <AlertDescription>
+                  {session.status === "succeeded"
+                    ? "This checkout session is successful. Payment actions are locked and shown for reference only."
+                    : session.status === "cancelled"
+                      ? "This checkout session was cancelled. Payment actions are locked and shown for reference only."
+                      : "This checkout session reached maximum retry attempts. Payment actions are locked and shown for reference only."}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             <div
-              className="field min-h-11 rounded-md border border-input bg-background px-3 py-2"
-              data-auxvault="amount"
-            />
-            <div
-              className="field min-h-11 rounded-md border border-input bg-background px-3 py-2"
-              data-auxvault="cardNumber"
-            />
-            <div
-              className="field min-h-11 rounded-md border border-input bg-background px-3 py-2"
-              data-auxvault="cardExpiry"
-            />
-            <div
-              className="field min-h-11 rounded-md border border-input bg-background px-3 py-2"
-              data-auxvault="cardCvv"
-            />
-          </div>
+              id={`result-${sessionId}`}
+              ref={resultRef}
+              data-auxvault-result
+              className="sr-only"
+            >
+              Waiting for SDK transaction response...
+            </div>
 
-          {isSdkConfigMissing ? (
-            <Alert variant="destructive">
-              <AlertTitle>SDK configuration missing</AlertTitle>
-              <AlertDescription>
-                Set NEXT_PUBLIC_AUXVAULT_API_KEY and
-                NEXT_PUBLIC_AUXVAULT_ENDPOINT to enable SDK checkout mode.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {sdkInitError ? (
-            <Alert variant="destructive">
-              <AlertTitle>SDK initialization failed</AlertTitle>
-              <AlertDescription>{sdkInitError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <div className={actionError ? "block" : "hidden"}>
-            <Alert variant="destructive">
-              <AlertTitle>Payment action failed</AlertTitle>
-              <AlertDescription>
-                {actionError ?? "Unknown payment error"}
-              </AlertDescription>
-            </Alert>
-          </div>
-
-          {isPaymentLockedSession ? (
-            <Alert>
-              <AlertTitle>
-                {session.status === "succeeded"
-                  ? "Payment already completed"
-                  : session.status === "cancelled"
-                    ? "Payment cancelled"
-                    : "Payment failed (retries exhausted)"}
-              </AlertTitle>
-              <AlertDescription>
-                {session.status === "succeeded"
-                  ? "This checkout session is successful. Payment actions are locked and shown for reference only."
-                  : session.status === "cancelled"
-                    ? "This checkout session was cancelled. Payment actions are locked and shown for reference only."
-                    : "This checkout session reached maximum retry attempts. Payment actions are locked and shown for reference only."}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-3 pt-2">
               <Button
                 type="button"
                 ref={sdkPayButtonRef}
                 data-auxvault-button="pay"
+                className="h-[60px] w-full rounded-2xl bg-blue-600 text-lg font-semibold text-white shadow-[0_8px_18px_rgba(37,99,235,0.35)] hover:bg-blue-700"
                 disabled={
                   processing ||
                   cancelling ||
                   isSdkConfigMissing ||
                   Boolean(sdkInitError) ||
-                  !sdkScriptLoaded
+                  !sdkScriptLoaded ||
+                  isPaymentLockedSession
                 }
               >
-                {processing ? "Processing..." : "Pay Now"}
+                <Lock className="size-5" />
+                {processing
+                  ? "Processing..."
+                  : `Pay ${formatAmount(session.amount, session.currency)}`}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={processing || cancelling}
-                onClick={handleCancel}
-              >
-                {cancelling ? "Cancelling..." : "Cancel"}
-              </Button>
+
+              <div className="text-center text-sm text-slate-600">
+                <p className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="size-4" />
+                  Payments are secured with 256-bit encryption
+                </p>
+                <p className="mt-1">
+                  Powered by{" "}
+                  <span className="font-semibold">LuqraToken SDK</span>
+                </p>
+              </div>
+
+              {!isPaymentLockedSession ? (
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCancel}
+                    disabled={processing || cancelling}
+                  >
+                    {cancelling ? "Cancelling..." : "Cancel checkout"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
-          )}
+          </div>
 
-          <div
-            id={`result-${sessionId}`}
-            ref={resultRef}
-            data-auxvault-result
-            className="min-h-10 rounded-md border border-dashed border-teal-300/70 bg-cyan-50/40 px-3 py-2 text-sm text-slate-700"
-          >
-            Waiting for SDK transaction response...
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-teal-300/80 shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Order/session summary <StatusBadge status={session.status} />
-          </CardTitle>
-          <CardDescription className="text-base leading-relaxed text-slate-700">
-            Current values from backend
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-base">
-          <div>
-            <p className="text-muted-foreground">Session ID</p>
-            <p className="font-mono">{session.sessionId}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Order ID</p>
-            <p className="font-mono">{session.orderId}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Amount</p>
-            <p>{formatAmount(session.amount, session.currency)}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Status</p>
-            <p className="mt-1">
-              <StatusBadge status={session.status} />
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Attempt count</p>
-            <p>
-              {session.attemptCount} / {session.maxAttempts}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Remaining retries</p>
-            <p>{remainingAttempts}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Expires at</p>
-            <p>{formatDateTime(session.expiresAt)}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Webhook delivered</p>
-            <p>{session.webhookDelivered ? "Yes" : "No"}</p>
-          </div>
-          {session.latestAttempt ? (
-            <div className="rounded-md border border-teal-300/75 bg-cyan-100/55 p-3">
-              <p className="text-muted-foreground">Latest attempt</p>
-              <p>Status: {session.latestAttempt.status}</p>
-              <p>Masked card: {session.latestAttempt.maskedCardNumber}</p>
-              <p>Response: {session.latestAttempt.responseCode}</p>
-              <p>Transaction: {session.latestAttempt.transactionId ?? "-"}</p>
+          <aside className="space-y-6 lg:pt-1">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-blue-600 text-lg font-semibold text-white">
+                M
+              </span>
+              <p className="text-xl font-semibold text-slate-950 md:text-2xl">
+                Merchant Store
+              </p>
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
 
-      <Card className="border-teal-300/80 shadow-sm md:col-span-2">
-        <CardHeader>
-          <CardTitle>SDK test guidance</CardTitle>
-          <CardDescription className="text-base leading-relaxed text-slate-700">
-            Use LuqraToken sandbox cards configured in your SDK dashboard.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-1.5 text-base text-muted-foreground">
-            {sdkTestCards.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+            <p className="text-4xl font-semibold text-slate-950 md:text-5xl">
+              {formatAmount(session.amount, session.currency)}
+            </p>
+
+            <div className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-slate-300 bg-white/75 p-3.5">
+              <div className="relative">
+                <span className="inline-flex h-16 w-16 items-center justify-center rounded-xl border border-slate-300 bg-amber-50 text-amber-800">
+                  <Tag className="size-5" />
+                </span>
+                <span className="absolute -top-1.5 -right-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-500 text-xs font-semibold text-white">
+                  1
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xl font-semibold leading-tight text-slate-900 md:text-2xl">
+                  Premium Service Plan
+                </p>
+                <p className="text-base text-slate-600">1-year subscription</p>
+              </div>
+              <p className="justify-self-end pt-1 text-xl font-semibold text-slate-950 whitespace-nowrap">
+                {formatAmount(session.amount, session.currency)}
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-slate-300 pt-4 text-base">
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Subtotal</span>
+                <span>{formatAmount(session.amount, session.currency)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Tax</span>
+                <span>{formatAmount(0, session.currency)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 text-3xl font-semibold text-slate-950">
+                <span>Total</span>
+                <span>{formatAmount(session.amount, session.currency)}</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <Card className="mt-6 border-slate-300/90 bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle>SDK test guidance</CardTitle>
+            <CardDescription className="text-base leading-relaxed text-slate-700">
+              Use LuqraToken sandbox cards configured in your SDK dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1.5 text-base text-slate-700">
+              {sdkTestCards.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
